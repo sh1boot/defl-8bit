@@ -32,9 +32,7 @@ struct VLC {
 struct ByteStuffer {
     ByteStuffer(std::span<uint8_t> output)
         : _storage(output), _ptr(output.data()) { }
-    uint8_t* begin() { return _storage.data(); }
     uint8_t* begin() const { return _storage.data(); }
-    uint8_t* end() { return _ptr; }
     uint8_t* end() const { return _ptr; }
     size_t size() const { return end() - begin(); }
     size_t done() const { return size(); }
@@ -68,7 +66,6 @@ struct BitStuffer : private ByteStuffer {
     BitStuffer(std::span<uint8_t> output) : ByteStuffer(output) {}
     BitStuffer(ByteStuffer const& bs) : ByteStuffer(bs) {}
     using ByteStuffer::begin;
-    uint8_t* end() { return _ptr + ((_bit + 7) >> 3); }
     uint8_t* end() const { return _ptr + ((_bit + 7) >> 3); }
     size_t size() const { return end() - begin(); }
     size_t done() {
@@ -456,7 +453,7 @@ class LiteralPool {
         r.literal_length = uint32_t(_pool.size() - r.literal_offset);
         return r;
     }
-    
+
    public:
     using LPIndex = uint16_t;
     struct Literal {
@@ -501,14 +498,35 @@ struct Defl8bit {
         _last_use.resize(pool.size(), UINT32_MAX);
     }
 
-    size_t block_header(ByteStuffer& out) {
+    std::tuple<uint32_t, uint32_t> tell() const {
+        return make_tuple(_position, _checksum);
+    }
+
+    size_t block_header(ByteStuffer& out) const {
         out.wr(hufftable._header_blob);
         return out.done();
     }
 
-    size_t block_end(ByteStuffer& out) {
+    size_t block_end(ByteStuffer& out) const {
         assert(hufftable._litcodes[256].len == 8);
         out.wr1(uint8_t(hufftable._litcodes[256].code));
+        return out.done();
+    }
+
+    size_t backref(ByteStuffer& out, uint16_t length, uint16_t distance) {
+        while (length >= 3) {
+            int run = length;
+            if (run > 258) {
+                run = 258;
+                if (length - run == 1) run--;
+                if (length - run == 2) run--;
+            }
+
+            uint32_t bits = hufftable._match_table[run] | (uint32_t(hufftable._dist_table[distance]) << 9);
+            out.wr3(bits);
+            length -= run;
+        }
+        // checksum and position are caller's responsibility
         return out.done();
     }
 
@@ -523,9 +541,10 @@ struct Defl8bit {
         uint32_t distance = _position - last_use;
         bool hit = blob.length >= 3 && last_use != UINT32_MAX && distance <= 32768;
         if (hit) {
-            uint32_t bits = hufftable._match_table[blob.length] | (uint32_t(hufftable._dist_table[distance]) << 9);
-            out.wr3(bits);
+            //fprintf(stderr, "match %d, @-%d, check: 0x%08x\n", blob.length, distance, blob.checksum);
+            backref(out, blob.length, distance);
         } else {
+            //fprintf(stderr, "literal %d check: 0x%08x\n", blob.length, blob.checksum);
             // TODO: if blob.length < 3 copy inline rather than from litpool.
             out.wr(blob.literal);
         }
@@ -597,32 +616,139 @@ class GZip: public Defl8bit<CRC32> {
     void integer(uint32_t i) {
         Defl8bit::integer(_out, i);
     }
+    void backref(uint16_t len, uint16_t distance) {
+        Defl8bit::backref(_out, len, distance);
+    }
 };
 
+
+struct ML {
+    GZip::LiteralPool _pool;
+    using LPIndex = GZip::LPIndex;
+    struct MLPtr {
+        uint32_t address;
+    };
+    struct MLOp {
+        uint32_t word;
+        constexpr uint32_t op() const { return word & 0xff000000; }
+        constexpr uint32_t arg() const { return word & 0x00ffffff; }
+        MLOp arg(uint32_t x) const { return MLOp{word | x}; }
+    };
+    struct RandInt {
+        uint32_t lo, hi;
+    };
+    static constexpr MLOp kCall{0x00000000};
+    static constexpr MLOp kReturn{0xff000000};
+    static constexpr MLOp kArray{0xfe000000};
+    static constexpr MLOp kLiteral{0xfd000000};
+    static constexpr MLOp kRandInt{0xfc000000};
+    static constexpr MLOp kProbability{0xfb000000};
+
+    std::vector<MLOp> _commands;
+
+    template <typename... Args>
+    MLPtr operator()(Args... args) {
+        MLPtr result = next_op();
+        ( ingest(args), ... );
+        _commands.emplace_back(kReturn);
+        return result;
+    }
+
+    template <typename... Args>
+    MLPtr pick(Args... args) {
+        constexpr uint32_t len = sizeof...(args);
+        MLPtr result = next_op();
+        _commands.emplace_back(kArray.arg(len));
+        ( ingest(args), ... );
+        return result;
+    }
+
+    void decode(GZip& out, MLPtr p, bool single = false) {
+        auto i = p.address;
+        //tuple<position,checksum> backrefs[8];
+        do {
+            assert(i < _commands.size());
+            MLOp c = _commands[i++];
+            uint32_t arg = c.arg();
+            switch (c.op()) {
+            default:
+                fprintf(stderr, "unsupported opcode: 0x%08x\n", c.word);
+                return;
+            case kReturn.op():
+                return;
+            case kCall.op():
+                decode(out, MLPtr{arg});
+                break;
+            case kArray.op():
+                decode(out, MLPtr{i + randint(arg, 0)}, true);
+                return;
+            case kLiteral.op():
+                out.literal(arg);
+                break;
+            case kRandInt.op():
+                out.integer(randint(_commands[i++].word, arg));
+                break;
+            case kProbability.op():
+                if (arg < randint(0x10000)) return;
+                break;
+            }
+        } while (!single);
+    }
+
+   private:
+    MLPtr next_op() const {
+        return MLPtr{uint32_t(_commands.size())};
+    }
+    void ingest(std::string_view s) {
+        _commands.emplace_back(kLiteral.arg(_pool.add_string(s)));
+    }
+    void ingest(MLPtr p) {
+        _commands.emplace_back(kCall.arg(p.address));
+    }
+    void ingest(MLOp op) {
+        _commands.emplace_back(op);
+    }
+    void ingest(RandInt r) {
+        _commands.emplace_back(kRandInt.arg(r.lo));
+        _commands.emplace_back(r.hi - r.lo);
+    }
+
+    uint32_t randint(uint32_t range, uint32_t start = 0) {
+        return rand() % range + start;
+    }
+};
+
+ML ml;
+
 #pragma clang diagnostic ignored "-Wunused-variable"
+
+auto number = ml.pick("one", "two", "three");
+
+auto hello = ml("Hello world!\n",number," is greater than ",number);
+auto test = ml(" --This is a ",ML::RandInt(10,20)," test-- ");
+auto cake = ml("CAKE 🍰 café ☕ colonoscopy 💩 ");
+
 int main(void) {
+    srand(time(NULL));
     std::array<uint8_t, 0x10000> buffer;
-    GZip::LiteralPool pool;
 
-    auto hello = pool.add_string("Hello world!\n");
-    auto test = pool.add_string("--This is a test--");
-    auto cake = pool.add_string("CAKE 🍰 💩 café");
-
-    GZip gz(pool, buffer);
+    GZip gz(ml._pool, buffer);
     gz.head(time(NULL));
-    gz.literal(hello);
-    gz.literal(test);
-    gz.literal(hello);
-    gz.literal(hello);
-    gz.literal(test);
-    gz.literal(cake);
+    ml.decode(gz, test);
+    ml.decode(gz, hello);
+    ml.decode(gz, test);
+    ml.decode(gz, hello);
+    ml.decode(gz, hello);
+    ml.decode(gz, test);
+    ml.decode(gz, cake);
+    ml.decode(gz, number);
     gz.byte('c');
     gz.byte('/');
     gz.integer(64738);
     gz.byte('/');
     gz.byte('c');
-    gz.literal(test);
-    gz.literal(hello);
+    ml.decode(gz, test);
+    ml.decode(gz, hello);
     gz.tail();
 
     std::span<uint8_t> testfile(gz);
