@@ -98,24 +98,21 @@ struct BitStuffer : private ByteStuffer {
     int _bit = 0;
 };
 
-struct Defl8bitTables {
-    std::vector<uint8_t> _header_blob;
+struct Defl8bitTableBuilder {
     std::array<VLC, 286> _litcodes;
     std::array<VLC, 30> _distcodes;
-    std::array<uint16_t, 259> _match_table;
-    std::array<uint16_t, 32769> _dist_table;
 
-    void set_literal_lengths(std::array<VLC, 286>& litcodes) {
+    constexpr void set_literal_lengths(std::array<VLC, 286>& litcodes) const {
         for (int i = 0; i < litcodes.size(); ++i) {
             auto& c = litcodes[i];
-            c.len = [](int x) -> uint8_t {
-                static constexpr uint8_t control[32] = {
+            c.len = [](int x) constexpr -> uint8_t {
+                constexpr uint8_t control[32] = {
                     9, 9, 9, 9, 9, 9, 9, 8,
                     8, 8, 8, 8, 8, 8, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 8, 0, 0, 0, 0
                 };
-                static constexpr uint8_t command[32] = {
+                constexpr uint8_t command[32] = {
                     8,
                     9, 9, 9, 9, 9, 9, 9, 9,
                     8, 8, 8, 8, 7, 7, 7, 7,
@@ -137,7 +134,7 @@ struct Defl8bitTables {
         }
     }
 
-    void set_distance_lengths(std::array<VLC, 30>& distcodes) {
+    void set_distance_lengths(std::array<VLC, 30>& distcodes) const {
         for (int i = 0; i < distcodes.size(); ++i) {
             auto& c = distcodes[i];
             int extra_bits = std::max(0, i - 2) >> 1;
@@ -145,8 +142,7 @@ struct Defl8bitTables {
         }
     }
 
-    static
-    void set_length_lengths(std::array<VLC, 19>& lencodes, std::array<uint16_t, 19>& hist, int tweak = 0) {
+    static void set_length_lengths(std::array<VLC, 19>& lencodes, std::array<uint16_t, 19>& hist, int tweak = 0) {
         // TODO: build a proper Huffman table from hist, then tweak it
         // until it fits.
 
@@ -160,40 +156,78 @@ struct Defl8bitTables {
             int j = i <= 15 ? i * (tweak * 2 + 1) & 15 : i;
             c.len = lentab[j];
         }
-        huffelise(lencodes);
     }
 
-    Defl8bitTables() {
+    constexpr Defl8bitTableBuilder() {
         set_literal_lengths(_litcodes);
         huffelise(_litcodes);
         set_distance_lengths(_distcodes);
         huffelise(_distcodes);
+    }
 
+    void get_header(std::vector<uint8_t>& output) const {
+        std::array<uint16_t, 19> hist = { 0 };
+        std::array<VLC, 19> lencodes;
+        encode_header(hist);
+        size_t bit_length = SIZE_MAX;
+        for (int tweak = 0; tweak < 32; ++tweak) {
+            set_length_lengths(lencodes, hist, tweak);
+            bit_length = measure_header(lencodes, hist);
+            if (bit_length % 8 == 0)
+                break;
+            fprintf(stderr, "projected header size: %zu.%zu\n", bit_length >> 3, bit_length & 7);
+        }
+        assert(bit_length % 8 == 0);
+        huffelise(lencodes);
+
+        output.resize((bit_length + 7) >> 3);
+        BitStuffer out(output);
+        out.wr(1, 1);  // BFINAL
+        out.wr(2, 0x02);  // BTYPE dynamic Huffman
+        out.wr(5, _litcodes.size() - 257);  // HLIT
+        out.wr(5, _distcodes.size() - 1);  // HDIST
+        out.wr(4, 19 - 4);  // HCLEN
+        for (int i : {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15}) {
+            out.wr(3, lencodes[i].len);
+        }
+        encode_header(out, &lencodes);
+        out.done();
+    }
+
+    void get_literals(std::array<uint16_t, 257>& output, std::array<uint8_t, 257>& outlen) const {
+        for (int i = 0; i < 257; ++i) {
+            output[i] = _litcodes[i].code;
+            outlen[i] = _litcodes[i].len;
+        }
+    }
+
+    void get_match_table(std::array<uint16_t, 259>& output) const {
         int i = 3;
         for (int j = 0; j < 28; ++j) {
             auto const& c = _litcodes[257 + j];
             int extra_bits = std::max(0, j - 4) >> 2;
             for (int m = 0; m < (1 << extra_bits); ++m) {
-                _match_table[i++] = c.code | (m << c.len);
+                output[i++] = c.code | (m << c.len);
             }
         }
         assert(i == 259);
+    }
 
-        i = 1;
+    void get_dist_table(std::array<uint16_t, 32769>& output) const {
+        int i = 1;
         for (int j = 0; j < _distcodes.size(); ++j) {
             auto const& c = _distcodes[j];
             int extra_bits = std::max(0, j - 2) >> 1;
             for (int m = 0; m < (1 << extra_bits); ++m) {
-                _dist_table[i++] = c.code | (m << c.len);
+                output[i++] = c.code | (m << c.len);
             }
         }
         assert(i == 32769);
-
-        assemble_header();
     }
+
    private:
     template <bool verbose = false>
-    static void huffelise(std::span<VLC> out) {
+    constexpr static void huffelise(std::span<VLC> out) {
         size_t hist[16] = { 0 };
         for (auto c: out) {
             assert(0 <= c.len && c.len < 16);
@@ -235,7 +269,7 @@ struct Defl8bitTables {
     }
 
     template <typename T>
-    void encode_header(T& out, std::array<VLC, 19>* lencodes = nullptr) {
+    void encode_header(T& out, std::array<VLC, 19>* lencodes = nullptr) const {
         int previous = -1;
         int count = 0;
 
@@ -299,38 +333,25 @@ struct Defl8bitTables {
         }
         return result;
     }
+};
 
-    void assemble_header() {
-        std::array<uint16_t, 19> hist = { 0 };
-        std::array<VLC, 19> lencodes;
-        encode_header(hist);
-        size_t bit_length = SIZE_MAX;
-        for (int tweak = 0; tweak < 32; ++tweak) {
-            set_length_lengths(lencodes, hist, tweak);
-            bit_length = measure_header(lencodes, hist);
-            if (bit_length % 8 == 0)
-                break;
-            fprintf(stderr, "projected header size: %zu.%zu\n", bit_length >> 3, bit_length & 7);
-        }
-        assert(bit_length % 8 == 0);
-        huffelise(lencodes);
+struct Defl8bitTables {
+    std::array<uint16_t, 257> _litcode;
+    std::array<uint8_t, 257> _litcodelen;
+    std::array<uint16_t, 259> _match_table;
+    std::array<uint16_t, 32769> _dist_table;
+    std::vector<uint8_t> _header_blob;
 
-        _header_blob.resize((bit_length + 7) >> 3);
-        BitStuffer out(_header_blob);
-        out.wr(1, 1);  // BFINAL
-        out.wr(2, 0x02);  // BTYPE dynamic Huffman
-        out.wr(5, _litcodes.size() - 257);  // HLIT
-        out.wr(5, _distcodes.size() - 1);  // HDIST
-        out.wr(4, 19 - 4);  // HCLEN
-        for (int i : {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15}) {
-            out.wr(3, lencodes[i].len);
-        }
-        encode_header(out, &lencodes);
-        out.done();
+    Defl8bitTables() {
+        const Defl8bitTableBuilder builder;
+        builder.get_header(_header_blob);
+        builder.get_literals(_litcode, _litcodelen);
+        builder.get_match_table(_match_table);
+        builder.get_dist_table(_dist_table);
     }
 };
 
-static Defl8bitTables hufftable;
+static const Defl8bitTables hufftable;
 
 struct Adler32 {
     uint64_t _asum = 1;
@@ -419,14 +440,15 @@ class LiteralPool {
         int utf_shift = 0, utf_stop = 0;
         uint64_t utf_chunk = 0;
         for (uint8_t byte : s) {
-            auto const& c = hufftable._litcodes[byte];
+            int code = hufftable._litcode[byte];
+            int code_len = hufftable._litcodelen[byte];
             check.add(byte);
             if (byte < 0x80) {
-                assert(c.len == 8);
-                _pool.push_back(c.code);
+                assert(code_len == 8);
+                _pool.push_back(code);
             } else if (byte < 0xc0) {
-                utf_chunk |= uint64_t(c.code) << utf_shift;
-                utf_shift += c.len;
+                utf_chunk |= uint64_t(code) << utf_shift;
+                utf_shift += code_len;
                 if (utf_shift >= utf_stop) {
                     utf_stop = 0;
                     while (utf_shift > 0) {
@@ -436,16 +458,16 @@ class LiteralPool {
                     }
                 }
             } else if (byte < 0xe0) {
-                utf_chunk = c.code;
-                utf_shift = c.len;
+                utf_chunk = code;
+                utf_shift = code_len;
                 utf_stop = 24;
             } else if (byte < 0xf0) {
-                utf_chunk = c.code;
-                utf_shift = c.len;
+                utf_chunk = code;
+                utf_shift = code_len;
                 utf_stop = 32;
             } else if (byte < 0xf8) {
-                utf_chunk = c.code;
-                utf_shift = c.len;
+                utf_chunk = code;
+                utf_shift = code_len;
                 utf_stop = 40;
             }
         }
@@ -508,8 +530,8 @@ struct Defl8bit {
     }
 
     size_t block_end(ByteStuffer& out) const {
-        assert(hufftable._litcodes[256].len == 8);
-        out.wr1(uint8_t(hufftable._litcodes[256].code));
+        assert(hufftable._litcodelen[256] == 8);
+        out.wr1(uint8_t(hufftable._litcode[256]));
         return out.done();
     }
 
@@ -555,9 +577,8 @@ struct Defl8bit {
     }
 
     size_t byte(ByteStuffer& out, uint8_t byte) {
-        auto const& c = hufftable._litcodes[byte];
-        assert(c.len == 8);
-        out.wr1(c.code);
+        assert(hufftable._litcodelen[byte] == 8);
+        out.wr1(hufftable._litcode[byte]);
         _checksum.add(byte);
         _position++;
         return out.done();
