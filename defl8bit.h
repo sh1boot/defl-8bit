@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <string>
 #include <vector>
@@ -11,57 +12,18 @@
 #include "checksum.h"
 #include "huffman.h"
 
-template <typename T_cksum>
 class LiteralPool {
+    using encoder_type = std::function<uint32_t(std::vector<uint8_t>&, std::string_view s)>;
     struct CompactLit {
         uint32_t literal_offset;
         uint16_t length, literal_length;
         uint32_t checksum;
+        CompactLit(size_t offset, size_t len)
+            : literal_offset(uint32_t(offset)), length(uint16_t(len)) {}
     };
+    encoder_type _encoder;
     std::vector<uint8_t> _pool;
-    std::vector<CompactLit> _blobs;
-
-    CompactLit mk_blob(std::string_view s) {
-        CompactLit r = { uint32_t(_pool.size()), uint16_t(s.size()), 0, 0 };
-        T_cksum check(0);
-        int utf_shift = 0, utf_stop = 0;
-        uint64_t utf_chunk = 0;
-        for (uint8_t byte : s) {
-            int code = hufftable._litcode[byte];
-            int code_len = hufftable._litcodelen[byte];
-            check.add(byte);
-            if (byte < 0x80) {
-                assert(code_len == 8);
-                _pool.push_back(code);
-            } else if (byte < 0xc0) {
-                utf_chunk |= uint64_t(code) << utf_shift;
-                utf_shift += code_len;
-                if (utf_shift >= utf_stop) {
-                    utf_stop = 0;
-                    while (utf_shift > 0) {
-                        _pool.push_back(utf_chunk & 255);
-                        utf_chunk >>= 8;
-                        utf_shift -= 8;
-                    }
-                }
-            } else if (byte < 0xe0) {
-                utf_chunk = code;
-                utf_shift = code_len;
-                utf_stop = 24;
-            } else if (byte < 0xf0) {
-                utf_chunk = code;
-                utf_shift = code_len;
-                utf_stop = 32;
-            } else if (byte < 0xf8) {
-                utf_chunk = code;
-                utf_shift = code_len;
-                utf_stop = 40;
-            }
-        }
-        r.checksum = check.get();
-        r.literal_length = uint32_t(_pool.size() - r.literal_offset);
-        return r;
-    }
+    std::vector<CompactLit> _headers;
 
    public:
     using LPIndex = uint16_t;
@@ -69,56 +31,115 @@ class LiteralPool {
         std::span<const uint8_t> literal;
         uint32_t length;
         uint32_t checksum;
+        LPIndex i;
     };
 
-    LiteralPool() {
+    LiteralPool(encoder_type encoder) : _encoder(encoder) {
         _pool.reserve(65536);
     }
 
-    size_t size() const {
-        return _blobs.size();
+    constexpr size_t size() const {
+        return _headers.size();
     }
 
-    LPIndex add_string(std::string_view s) {
-        LPIndex r = LPIndex(_blobs.size());
-        _blobs.push_back(mk_blob(s));
+    constexpr LPIndex push(std::string_view s) {
+        LPIndex r = LPIndex(_headers.size());
+        _headers.emplace_back(_pool.size(), s.size());
+        auto& header = _headers.back();
+        header.checksum = _encoder(_pool, s);
+        header.literal_length = _pool.size() - header.literal_offset;
         return r;
     }
 
-    Literal get(LPIndex i) const {
-        CompactLit const& lit = _blobs[i];
-        return Literal(std::span(_pool).subspan(lit.literal_offset, lit.literal_length), lit.length, lit.checksum);
+    constexpr Literal get(LPIndex i) const {
+        CompactLit const& lit = _headers[i];
+        return Literal(
+                std::span(_pool).subspan(lit.literal_offset, lit.literal_length),
+                lit.length, lit.checksum, i);
     }
 };
 
-template <typename T_cksum = Adler32>
-struct Defl8bit {
-    using LiteralPool = LiteralPool<T_cksum>;
-    using LPIndex = LiteralPool::LPIndex;
-
-    Defl8bit(LiteralPool const& pool) : _litpool(pool) {
-        _last_use.resize(pool.size(), UINT32_MAX);
-    }
-
+struct RawData {
+    RawData() {}
+    RawData(std::span<uint8_t> out) : _out(out) {}
+    void reset(std::span<uint8_t> dest) { _out = dest; }
     uint8_t* begin() const { return _out.begin(); }
     uint8_t* end() const { return _out.end(); }
     size_t size() const { return _out.size(); }
-    void reset(std::span<uint8_t> dest) { _out = dest; }
-
     std::tuple<uint32_t, uint32_t> tell() const {
-        return make_tuple(_position, _checksum);
+        return {_position, 0};
     }
 
-    void block_header() {
+    constexpr void block_header() {}
+    constexpr void block_end() {}
+
+    // Should probably be virtual:
+    constexpr void backref(uint16_t length, uint16_t distance) {
+        if (distance < _out.size()) {
+            _out.wr(std::span(_out.end() - distance, _out.end()));
+        } else {
+            constexpr uint8_t oops[] = "###out of bounds backref###";
+            _out.wr(oops);
+        }
+        // checksum & length are caller's responsibility
+    }
+
+    // Should probably be virtual:
+    constexpr void literal(std::span<const uint8_t> s) {
+        _out.wr(s);
+        // checksum & length are caller's responsibility
+    }
+
+    // Should probably be virtual:
+    constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
+        literal(blob.literal);
+        _position += blob.length;
+    }
+
+    // Should probably be virtual:
+    constexpr void byte(uint8_t byte) {
+        _out.wr1(byte);
+        _position++;
+    }
+
+    // Should probably be virtual:
+    constexpr void integer(uint32_t value) {
+        uint8_t tmp[16], *end = tmp + 16, *p = end;
+        do {
+            int d = value % 10;
+            value /= 10;
+            *--p = 0x30 + d;
+        } while (value > 0);
+        _position += end - p;
+        _out.wr(std::span(p, end));
+    }
+
+    static uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
+        out.insert(out.end(), s.begin(), s.end());
+        return 0;
+    }
+
+   protected:
+    ByteStuffer _out;
+    uint32_t _position = 0;
+};
+
+template <typename T_cksum = Adler32>
+struct Defl8bit : public RawData {
+    std::tuple<uint32_t, uint32_t> tell() const {
+        return {_position, _checksum};
+    }
+
+    constexpr void block_header() {
         _out.wr(hufftable._header_blob);
     }
 
-    void block_end() {
+    constexpr void block_end() {
         assert(hufftable._litcodelen[256] == 8);
         _out.wr1(uint8_t(hufftable._litcode[256]));
     }
 
-    void backref(uint16_t length, uint16_t distance) {
+    constexpr void backref(uint16_t length, uint16_t distance) {
         while (length >= 3) {
             int run = length;
             if (run > 258) {
@@ -131,64 +152,96 @@ struct Defl8bit {
             _out.wr3(bits);
             length -= run;
         }
-        // checksum and position are caller's responsibility
+        // checksum & length are caller's responsibility
     }
 
-    void literal(LPIndex i) {
+    // Should probably be virtual:
+    constexpr void literal(std::span<const uint8_t> s) {
+        _out.wr(s);
+        // checksum & length are caller's responsibility
+    }
+
+    constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
+        int i = blob.i;
         if (i >= _last_use.size()) {
-            _last_use.resize(_litpool.size(), UINT32_MAX);
+            _last_use.resize(i + 16, UINT32_MAX);
         }
-        assert(i < _last_use.size());
         uint32_t last_use = _last_use[i];
-        auto const& blob = _litpool.get(i);
         _last_use[i] = _position;
         uint32_t distance = _position - last_use;
         bool hit = blob.length >= 3 && last_use != UINT32_MAX && distance <= 32768;
+
         if (hit) {
-            //fprintf(stderr, "match %d, @-%d, check: 0x%08x\n", blob.length, distance, blob.checksum);
             backref(blob.length, distance);
         } else {
-            //fprintf(stderr, "literal %d check: 0x%08x\n", blob.length, blob.checksum);
-            // TODO: if blob.length < 3 copy inline rather than from litpool.
-            _out.wr(blob.literal);
+            literal(blob.literal);
         }
         _position += blob.length;
         _checksum.ffwd(blob.length);
         _checksum.splice(blob.checksum);
     }
 
-    void byte(uint8_t byte) {
+    constexpr void byte(uint8_t byte) {
         assert(hufftable._litcodelen[byte] == 8);
         _out.wr1(hufftable._litcode[byte]);
         _checksum.add(byte);
         _position++;
     }
 
-    void integer(uint32_t value) {
-        uint8_t tmp[16], *p = tmp + 16;
-        int len = 0;
+    constexpr void integer(uint32_t value) {
+        uint8_t tmp[16], *const end = tmp + 16, *p = end;
         do {
             int d = value % 10;
             value /= 10;
             *--p = 0x30 + d;
-            len++;
         } while (value > 0);
-        while (len-- > 0) byte(*p++);
+        for (auto digit : std::span(p, end)) byte(digit);
+    }
+
+    static uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
+        T_cksum check(0);
+        int utf_shift = 0;
+        uint64_t utf_chunk = 0;
+        for (uint8_t byte : s) {
+            int code = hufftable._litcode[byte];
+            int code_len = hufftable._litcodelen[byte];
+            check.add(byte);
+            if (byte < 0x80) {
+                assert(code_len == 8);
+                out.push_back(code);
+            } else if (byte < 0xc0) {
+                utf_chunk |= uint64_t(code) << utf_shift;
+                utf_shift += code_len;
+                if ((utf_shift & 7) == 0) {
+                    // Could try: out.wr(span(reinterpret_cast<uint8_t*>(&utf_chunk), utf_shift >> 3));
+                    while (utf_shift > 0) {
+                        out.push_back(utf_chunk & 255);
+                        utf_chunk >>= 8;
+                        utf_shift -= 8;
+                    }
+                }
+            } else if (byte < 0xf8) {
+                // Can avoid setting a lengh counter, here, because we
+                // stop on a multiple of 8 bits and never visit another
+                // multiple on the way:
+                //  - 0xc0-0xdf: code lengths: 14, 24
+                //  - 0xe0-0xef: code lengths: 12, 22, 32
+                //  - 0xf0-0xf7: code lengths: 10, 20, 30, 40
+                utf_chunk = code;
+                utf_shift = code_len;
+            }
+        }
+        return check;
     }
 
    protected:
-    LiteralPool const& _litpool;
     std::vector<uint32_t> _last_use;
-    ByteStuffer _out;
     T_cksum _checksum;
-    uint32_t _position = 0;
 };
 
-struct GZip: public Defl8bit<CRC32> {
-    using Defl8bit::LiteralPool;
-    using Defl8bit::LPIndex;
-    GZip(LiteralPool const& pool) : Defl8bit(pool) {}
-    GZip(LiteralPool const& pool, std::span<uint8_t> dest) : Defl8bit(pool) { _out = dest; }
+struct GZip : public Defl8bit<CRC32> {
+    GZip() {}
+    GZip(std::span<uint8_t> dest) { _out = dest; }
 
     void head(time_t time = 0) {
         _out.wr1(0x1f);

@@ -57,6 +57,7 @@ struct Adler32 {
         sync();
         return _bsum << 16 | _asum;
     }
+    operator uint32_t() { return get(); }
 };
 
 struct CRC32 {
@@ -93,6 +94,8 @@ struct CRC32 {
     uint32_t get(bool finalise = false) {
         return finalise ? ~_crc : _crc;
     }
+
+    operator uint32_t() { return get(); }
 };
 
 #endif  // !defined(CHECKSUM_H_INCLUDED)
