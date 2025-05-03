@@ -10,14 +10,14 @@ struct CatFacts {
     ML<T> ml;
     ML<T>::MLPtr a_fact;
 
-    void do_something(T& out) {
+    void do_something(T& out) const {
         ml.decode(out, a_fact);
     }
 
     constexpr CatFacts();
 };
 
-extern CatFacts<GZip> gzip_catfacts;
-extern CatFacts<RawData> raw_catfacts;
+extern const CatFacts<GZip> gzip_catfacts;
+extern const CatFacts<RawData> raw_catfacts;
 
 #endif  // !defined(CATFACTS_H_INCLUDED)

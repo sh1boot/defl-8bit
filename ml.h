@@ -13,7 +13,7 @@ struct ML {
         uint32_t word;
         constexpr uint32_t op() const { return word & 0xff000000; }
         constexpr uint32_t arg() const { return word & 0x00ffffff; }
-        MLOp arg(uint32_t x) const { return MLOp{word | x}; }
+        constexpr MLOp arg(uint32_t x) const { return MLOp{word | x}; }
     };
     struct RandInt {
         uint32_t lo, hi;
@@ -27,8 +27,10 @@ struct ML {
 
     std::vector<MLOp> _commands;
 
+    constexpr ML() {}
+
     template <typename... Args>
-    MLPtr operator()(Args... args) {
+    constexpr MLPtr operator()(Args... args) {
         MLPtr result = next_op();
         ( ingest(args), ... );
         _commands.emplace_back(kReturn);
@@ -36,7 +38,7 @@ struct ML {
     }
 
     template <typename... Args>
-    MLPtr pick(Args... args) {
+    constexpr MLPtr pick(Args... args) {
         constexpr uint32_t len = sizeof...(args);
         MLPtr result = next_op();
         _commands.emplace_back(kArray.arg(len));
@@ -44,7 +46,7 @@ struct ML {
         return result;
     }
 
-    void decode(T& out, MLPtr p, bool single = false) {
+    void decode(T& out, MLPtr p, bool single = false) const {
         auto i = p.address;
         //tuple<position,checksum> backrefs[8];
         do {
@@ -77,24 +79,24 @@ struct ML {
     }
 
    private:
-    MLPtr next_op() const {
+    constexpr MLPtr next_op() const {
         return MLPtr{uint32_t(_commands.size())};
     }
-    void ingest(std::string_view s) {
+    constexpr void ingest(std::string_view s) {
         _commands.emplace_back(kLiteral.arg(_pool.push(s)));
     }
-    void ingest(MLPtr p) {
+    constexpr void ingest(MLPtr p) {
         _commands.emplace_back(kCall.arg(p.address));
     }
-    void ingest(MLOp op) {
+    constexpr void ingest(MLOp op) {
         _commands.emplace_back(op);
     }
-    void ingest(RandInt r) {
+    constexpr void ingest(RandInt r) {
         _commands.emplace_back(kRandInt.arg(r.lo));
         _commands.emplace_back(r.hi - r.lo);
     }
 
-    uint32_t randint(uint32_t range, uint32_t start = 0) {
+    uint32_t randint(uint32_t range, uint32_t start = 0) const {
         return rand() % range + start;
     }
 };

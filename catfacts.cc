@@ -24,5 +24,7 @@ constexpr CatFacts<T>::CatFacts() {
     a_fact = ml(intro, breed, ability, reference, "!!\n");
 }
 
-/*constexpr*/ CatFacts<GZip> gzip_catfacts;
-/*constexpr*/ CatFacts<RawData> raw_catfacts;
+//constexpr Defl8bitTables hufftable;
+
+const/*expr*/ CatFacts<GZip> gzip_catfacts;
+const/*expr*/ CatFacts<RawData> raw_catfacts;

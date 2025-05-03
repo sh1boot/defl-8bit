@@ -13,12 +13,12 @@
 #include "huffman.h"
 
 class LiteralPool {
-    using encoder_type = std::function<uint32_t(std::vector<uint8_t>&, std::string_view s)>;
+    typedef uint32_t(&encoder_type)(std::vector<uint8_t>&, std::string_view s);
     struct CompactLit {
         uint32_t literal_offset;
         uint16_t length, literal_length;
         uint32_t checksum;
-        CompactLit(size_t offset, size_t len)
+        constexpr CompactLit(size_t offset, size_t len)
             : literal_offset(uint32_t(offset)), length(uint16_t(len)) {}
     };
     encoder_type _encoder;
@@ -34,7 +34,7 @@ class LiteralPool {
         LPIndex i;
     };
 
-    LiteralPool(encoder_type encoder) : _encoder(encoder) {
+    constexpr LiteralPool(encoder_type encoder) : _encoder(encoder) {
         _pool.reserve(65536);
     }
 
@@ -114,7 +114,7 @@ struct RawData {
         _out.wr(std::span(p, end));
     }
 
-    static uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
+    static constexpr uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
         out.insert(out.end(), s.begin(), s.end());
         return 0;
     }
@@ -198,7 +198,7 @@ struct Defl8bit : public RawData {
         for (auto digit : std::span(p, end)) byte(digit);
     }
 
-    static uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
+    static constexpr uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
         T_cksum check(0);
         int utf_shift = 0;
         uint64_t utf_chunk = 0;
