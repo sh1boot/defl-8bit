@@ -12,8 +12,8 @@
 #include "ml.h"
 #include "catfacts.h"
 
+#if 0
 #pragma clang diagnostic ignored "-Wunused-variable"
-
 using GZML = ML<GZip>;
 
 GZML ml;
@@ -24,6 +24,7 @@ auto hello = ml("Hello world!\n",number," is greater than ",number,".\n");
 auto test = ml(" --This is a ",GZML::RandInt(10,20)," test-- ");
 auto cake = ml("CAKE 🍰 café ☕ colonoscopy 💩 !\n\n");
 auto theend = ml("That is all!\n");
+#endif
 
 int main(void) {
     srand(time(NULL));
