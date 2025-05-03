@@ -29,7 +29,7 @@ int main(void) {
     srand(time(NULL));
     std::array<uint8_t, 0x10000> buffer;
 
-    GZip gz(buffer);
+    ML<GZip>::Generator gz(gzip_catfacts, buffer);
 
     gz.head(time(NULL));
 #if 0

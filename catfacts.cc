@@ -2,26 +2,26 @@
 
 template <typename T>
 constexpr CatFacts<T>::CatFacts() {
-    auto intro = ml.pick(
+    auto intro = _ml.pick(
         "Did you know, ",
         "Fun fact, "
     );
-    auto breed = ml.pick(
+    auto breed = _ml.pick(
         "brown cats",
         "blue cats",
         "tigers"
     );
 
-    auto ability = ml.pick(
+    auto ability = _ml.pick(
         " can jump as high as ",
         " can tell jokes as funny as ",
         " are better than "
     );
-    auto reference = ml.pick(
+    auto reference = _ml.pick(
         "goats",
         "the Eiffel Tower"
     );
-    a_fact = ml(intro, breed, ability, reference, "!!\n");
+    _one_fact = _ml(intro, breed, ability, reference, "!!\n");
 }
 
 //constexpr Defl8bitTables hufftable;

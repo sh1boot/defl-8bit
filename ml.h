@@ -27,6 +27,49 @@ struct ML {
 
     std::vector<MLOp> _commands;
 
+    class Generator : public T {
+        ML const& _ml;
+
+       public:
+        using T::integer;
+        using T::literal;
+        using T::randint;
+        Generator(ML const& ml) : _ml(ml) {}
+        Generator(ML const& ml, std::span<uint8_t> out) : T(out), _ml(ml) {}
+
+        void decode(MLPtr p, bool single = false) {
+            //tuple<position,checksum> backrefs[8];
+            auto i = p.address;
+            do {
+                assert(i < _ml._commands.size());
+                MLOp c = _ml._commands[i++];
+                uint32_t arg = c.arg();
+                switch (c.op()) {
+                default:
+                    fprintf(stderr, "unsupported opcode: 0x%08x\n", c.word);
+                    return;
+                case kReturn.op():
+                    return;
+                case kCall.op():
+                    decode(MLPtr{arg});
+                    break;
+                case kArray.op():
+                    decode(MLPtr{i + randint(arg, 0)}, true);
+                    return;
+                case kLiteral.op():
+                    literal(_ml._pool.get(arg));
+                    break;
+                case kRandInt.op():
+                    integer(randint(_ml._commands[i++].word, arg));
+                    break;
+                case kProbability.op():
+                    if (arg < randint(0x10000)) return;
+                    break;
+                }
+            } while (!single);
+        }
+    };
+
     constexpr ML() {}
 
     template <typename... Args>
@@ -46,38 +89,6 @@ struct ML {
         return result;
     }
 
-    void decode(T& out, MLPtr p, bool single = false) const {
-        auto i = p.address;
-        //tuple<position,checksum> backrefs[8];
-        do {
-            assert(i < _commands.size());
-            MLOp c = _commands[i++];
-            uint32_t arg = c.arg();
-            switch (c.op()) {
-            default:
-                fprintf(stderr, "unsupported opcode: 0x%08x\n", c.word);
-                return;
-            case kReturn.op():
-                return;
-            case kCall.op():
-                decode(out, MLPtr{arg});
-                break;
-            case kArray.op():
-                decode(out, MLPtr{i + randint(arg, 0)}, true);
-                return;
-            case kLiteral.op():
-                out.literal(_pool.get(arg));
-                break;
-            case kRandInt.op():
-                out.integer(randint(_commands[i++].word, arg));
-                break;
-            case kProbability.op():
-                if (arg < randint(0x10000)) return;
-                break;
-            }
-        } while (!single);
-    }
-
    private:
     constexpr MLPtr next_op() const {
         return MLPtr{uint32_t(_commands.size())};
@@ -94,10 +105,6 @@ struct ML {
     constexpr void ingest(RandInt r) {
         _commands.emplace_back(kRandInt.arg(r.lo));
         _commands.emplace_back(r.hi - r.lo);
-    }
-
-    uint32_t randint(uint32_t range, uint32_t start = 0) const {
-        return rand() % range + start;
     }
 };
 

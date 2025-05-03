@@ -62,6 +62,7 @@ class LiteralPool {
 struct RawData {
     RawData() {}
     RawData(std::span<uint8_t> out) : _out(out) {}
+    void reset() { _out.clear(); }
     void reset(std::span<uint8_t> dest) { _out = dest; }
     uint8_t* begin() const { return _out.begin(); }
     uint8_t* end() const { return _out.end(); }
@@ -122,6 +123,10 @@ struct RawData {
    protected:
     ByteStuffer _out;
     uint32_t _position = 0;
+
+    uint32_t randint(uint32_t range, uint32_t start = 0) const {
+        return rand() % range + start;
+    }
 };
 
 template <typename T_cksum = Adler32>
@@ -240,6 +245,9 @@ struct Defl8bit : public RawData {
 };
 
 struct GZip : public Defl8bit<CRC32> {
+    using Defl8bit<CRC32>::integer;
+    using Defl8bit<CRC32>::literal;
+    using Defl8bit<CRC32>::randint;
     GZip() {}
     GZip(std::span<uint8_t> dest) { _out = dest; }
 

@@ -7,11 +7,14 @@
 
 template <typename T>
 struct CatFacts {
-    ML<T> ml;
-    ML<T>::MLPtr a_fact;
+    ML<T> _ml;
+    ML<T>::MLPtr _one_fact;
+    operator ML<T>const&() const {
+        return _ml;
+    }
 
-    void do_something(T& out) const {
-        ml.decode(out, a_fact);
+    void do_something(ML<T>::Generator& out) const {
+        out.decode(_one_fact);
     }
 
     constexpr CatFacts();

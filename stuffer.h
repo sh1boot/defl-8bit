@@ -23,6 +23,7 @@ struct ByteStuffer {
     constexpr uint8_t* end() const { return _ptr; }
     constexpr size_t size() const { return end() - begin(); }
     constexpr size_t done() const { return size(); }
+    constexpr void clear() { _ptr = _storage.data(); }
 
     constexpr void wr4(uint32_t x) {
         __builtin_memcpy(_ptr, &x, sizeof(x));
