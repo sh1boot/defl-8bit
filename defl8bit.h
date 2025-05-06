@@ -267,6 +267,8 @@ struct GZip : public Defl8bit<CRC32> {
         _out.wr4(_checksum.get(true));
         _out.wr4(_position);
     }
+   protected:
+    using Defl8bit<CRC32>::_last_use;
 };
 
 #endif  // !defined(DEFL8BIT_H_INCLUDED)

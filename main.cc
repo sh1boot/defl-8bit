@@ -12,7 +12,6 @@
 #include "ml.h"
 #include "catfacts.h"
 
-#if 0
 #pragma clang diagnostic ignored "-Wunused-variable"
 using GZML = ML<GZip>;
 
@@ -24,7 +23,6 @@ auto hello = ml("Hello world!\n",number," is greater than ",number,".\n");
 auto test = ml(" --This is a ",GZML::RandInt(10,20)," test-- ");
 auto cake = ml("CAKE 🍰 café ☕ colonoscopy 💩 !\n\n");
 auto theend = ml("That is all!\n");
-#endif
 
 int main(void) {
     srand(time(NULL));
@@ -33,23 +31,11 @@ int main(void) {
     ML<GZip>::Generator gz(gzip_catfacts, buffer);
 
     gz.head(time(NULL));
-#if 0
-    ml.decode(gz, test);
-    ml.decode(gz, hello);
-    ml.decode(gz, test);
-    ml.decode(gz, hello);
-    ml.decode(gz, hello);
-    ml.decode(gz, test);
-    ml.decode(gz, cake);
-    ml.decode(gz, number);
-    ml.decode(gz, test);
-    ml.decode(gz, hello);
-    ml.decode(gz, theend);
-#else
+
     for (int i = 0; i < 10; ++i) {
         gzip_catfacts.do_something(gz);
     }
-#endif
+
     gz.byte('\n');
     gz.byte('c');
     gz.byte('/');
@@ -57,6 +43,19 @@ int main(void) {
     gz.byte('/');
     gz.byte('c');
     gz.byte('\n');
+
+    gz.set_source(ml);
+    gz.decode(test);
+    gz.decode(hello);
+    gz.decode(test);
+    gz.decode(hello);
+    gz.decode(hello);
+    gz.decode(test);
+    gz.decode(cake);
+    gz.decode(number);
+    gz.decode(test);
+    gz.decode(hello);
+    gz.decode(theend);
 
     gz.tail();
 

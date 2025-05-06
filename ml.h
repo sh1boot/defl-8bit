@@ -28,21 +28,31 @@ struct ML {
     std::vector<MLOp> _commands;
 
     class Generator : public T {
-        ML const& _ml;
+        ML const* _ml;
+        using T::_last_use;
 
        public:
         using T::integer;
         using T::literal;
         using T::randint;
-        Generator(ML const& ml) : _ml(ml) {}
-        Generator(ML const& ml, std::span<uint8_t> out) : T(out), _ml(ml) {}
+        Generator(ML const& ml) : _ml(&ml) {
+            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+        }
+        Generator(ML const& ml, std::span<uint8_t> out) : T(out), _ml(&ml) {
+            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+        }
+
+        void set_source(ML const& ml) {
+            _ml = &ml;
+            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+        }
 
         void decode(MLPtr p, bool single = false) {
             //tuple<position,checksum> backrefs[8];
             auto i = p.address;
             do {
-                assert(i < _ml._commands.size());
-                MLOp c = _ml._commands[i++];
+                assert(i < _ml->_commands.size());
+                MLOp c = _ml->_commands[i++];
                 uint32_t arg = c.arg();
                 switch (c.op()) {
                 default:
@@ -57,10 +67,10 @@ struct ML {
                     decode(MLPtr{i + randint(arg, 0)}, true);
                     return;
                 case kLiteral.op():
-                    literal(_ml._pool.get(arg));
+                    literal(_ml->_pool.get(arg));
                     break;
                 case kRandInt.op():
-                    integer(randint(_ml._commands[i++].word, arg));
+                    integer(randint(_ml->_commands[i++].word, arg));
                     break;
                 case kProbability.op():
                     if (arg < randint(0x10000)) return;
