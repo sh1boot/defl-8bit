@@ -11,7 +11,7 @@
 
 template <size_t N>
 class HuffmanTable {
-    VLC _data[N];
+    VLC data_[N];
 
    public:
     template <typename T>
@@ -32,7 +32,7 @@ class HuffmanTable {
         // TODO: something like this:
         // assert(codes[15] == 0x8000);
 
-        for (int i = 0; auto& c : _data) {
+        for (int i = 0; auto& c : data_) {
             int len = f(i);
             if (len > 0) {
                 code = codes[len]++;
@@ -42,8 +42,8 @@ class HuffmanTable {
             ++i;
         }
     }
-    constexpr VLC operator[](int i) const { return _data[i]; }
-    constexpr VLC const* begin() const { return _data; }
+    constexpr VLC operator[](int i) const { return data_[i]; }
+    constexpr VLC const* begin() const { return data_; }
     constexpr VLC const* end() const { return begin() + N; }
     constexpr size_t size() const { return N; }
 };
@@ -183,12 +183,12 @@ class Defl8bitTableBuilder {
                     break;
             }
             assert(bit_length % 8 == 0);
-            _lenlens = lenlens;
-            _bit_length = bit_length;
+            lenlens_ = lenlens;
+            bit_length_ = bit_length;
         }
 
         constexpr void get(std::span<uint8_t> output) const {
-            HuffmanTable<19> lencodes([this](int i) constexpr -> int { return _lenlens[i]; });
+            HuffmanTable<19> lencodes([this](int i) constexpr -> int { return lenlens_[i]; });
 
             assert(output.size() == size());
             BitStuffer out(output);
@@ -205,25 +205,25 @@ class Defl8bitTableBuilder {
         }
 
         constexpr size_t size() const {
-            return (_bit_length + 7) >> 3;
+            return (bit_length_ + 7) >> 3;
         }
 
-        std::array<uint8_t, 19> _lenlens;
-        size_t _bit_length;
+        std::array<uint8_t, 19> lenlens_;
+        size_t bit_length_;
     };
 
    public:
-    const HuffmanTable<286> _litcodes;
-    const HuffmanTable<30> _distcodes;
-    const DeflateHeader _header;
+    const HuffmanTable<286> litcodes_;
+    const HuffmanTable<30> distcodes_;
+    const DeflateHeader header_;
 
     constexpr Defl8bitTableBuilder()
-        : _litcodes(get_literal_length), _distcodes(get_distance_length) {}
+        : litcodes_(get_literal_length), distcodes_(get_distance_length) {}
 
     constexpr void get_literals(std::array<uint16_t, 257>& output, std::array<uint8_t, 257>& outlen) const {
         for (int i = 0; i < 257; ++i) {
-            output[i] = _litcodes[i].code;
-            outlen[i] = _litcodes[i].len;
+            output[i] = litcodes_[i].code;
+            outlen[i] = litcodes_[i].len;
         }
     }
 
@@ -233,7 +233,7 @@ class Defl8bitTableBuilder {
             output[i++] = 0;
         }
         for (int j = 0; j < 28; ++j) {
-            auto const& c = _litcodes[257 + j];
+            auto const& c = litcodes_[257 + j];
             int extra_bits = std::max(0, j - 4) >> 2;
             for (int m = 0; m < (1 << extra_bits); ++m) {
                 output[i++] = c.code | (m << c.len);
@@ -245,8 +245,8 @@ class Defl8bitTableBuilder {
     constexpr void get_dist_table(std::array<uint16_t, 32769>& output) const {
         int i = 0;
         output[i++] = 0;
-        for (size_t j = 0; j < _distcodes.size(); ++j) {
-            auto const& c = _distcodes[j];
+        for (size_t j = 0; j < distcodes_.size(); ++j) {
+            auto const& c = distcodes_[j];
             int extra_bits = std::max(0, int(j - 2)) >> 1;
             for (int m = 0; m < (1 << extra_bits); ++m) {
                 output[i++] = c.code | (m << c.len);
@@ -257,18 +257,18 @@ class Defl8bitTableBuilder {
 };
 
 struct Defl8bitTables {
-    std::array<uint16_t, 257> _litcode;
-    std::array<uint8_t, 257> _litcodelen;
-    std::array<uint16_t, 259> _match_table;
-    std::array<uint16_t, 32769> _dist_table;
-    std::array<uint8_t, Defl8bitTableBuilder()._header.size()> _header_blob;
+    std::array<uint16_t, 257> litcode_;
+    std::array<uint8_t, 257> litcodelen_;
+    std::array<uint16_t, 259> match_table_;
+    std::array<uint16_t, 32769> dist_table_;
+    std::array<uint8_t, Defl8bitTableBuilder().header_.size()> header_blob_;
 
     constexpr Defl8bitTables() {
         constexpr Defl8bitTableBuilder builder;
-        builder.get_literals(_litcode, _litcodelen);
-        builder.get_match_table(_match_table);
-        builder.get_dist_table(_dist_table);
-        builder._header.get(_header_blob);
+        builder.get_literals(litcode_, litcodelen_);
+        builder.get_match_table(match_table_);
+        builder.get_dist_table(dist_table_);
+        builder.header_.get(header_blob_);
     }
 };
 

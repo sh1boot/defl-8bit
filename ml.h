@@ -5,7 +5,7 @@
 
 template <typename T>
 struct ML {
-    LiteralPool _pool{T::literal_encoder};
+    LiteralPool pool_{T::literal_encoder};
     struct MLPtr {
         uint32_t address;
     };
@@ -25,34 +25,34 @@ struct ML {
     static constexpr MLOp kRandInt{0xfc000000};
     static constexpr MLOp kProbability{0xfb000000};
 
-    std::vector<MLOp> _commands;
+    std::vector<MLOp> commands_;
 
     class Generator : public T {
-        ML const* _ml;
-        using T::_last_use;
+        ML const* ml_;
+        using T::last_use_;
 
        public:
         using T::integer;
         using T::literal;
         using T::randint;
-        Generator(ML const& ml) : _ml(&ml) {
-            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+        Generator(ML const& ml) : ml_(&ml) {
+            last_use_.assign(ml_->commands_.size(), UINT32_MAX);
         }
-        Generator(ML const& ml, std::span<uint8_t> out) : T(out), _ml(&ml) {
-            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+        Generator(ML const& ml, std::span<uint8_t> out) : T(out), ml_(&ml) {
+            last_use_.assign(ml_->commands_.size(), UINT32_MAX);
         }
 
         void set_source(ML const& ml) {
-            _ml = &ml;
-            _last_use.assign(_ml->_commands.size(), UINT32_MAX);
+            ml_ = &ml;
+            last_use_.assign(ml_->commands_.size(), UINT32_MAX);
         }
 
         void decode(MLPtr p, bool single = false) {
             //tuple<position,checksum> backrefs[8];
             auto i = p.address;
             do {
-                assert(i < _ml->_commands.size());
-                MLOp c = _ml->_commands[i++];
+                assert(i < ml_->commands_.size());
+                MLOp c = ml_->commands_[i++];
                 uint32_t arg = c.arg();
                 switch (c.op()) {
                 default:
@@ -67,10 +67,10 @@ struct ML {
                     decode(MLPtr{i + randint(arg, 0)}, true);
                     return;
                 case kLiteral.op():
-                    literal(_ml->_pool.get(arg));
+                    literal(ml_->pool_.get(arg));
                     break;
                 case kRandInt.op():
-                    integer(randint(_ml->_commands[i++].word, arg));
+                    integer(randint(ml_->commands_[i++].word, arg));
                     break;
                 case kProbability.op():
                     if (arg < randint(0x10000)) return;
@@ -86,7 +86,7 @@ struct ML {
     constexpr MLPtr operator()(Args... args) {
         MLPtr result = next_op();
         ( ingest(args), ... );
-        _commands.emplace_back(kReturn);
+        commands_.emplace_back(kReturn);
         return result;
     }
 
@@ -94,27 +94,27 @@ struct ML {
     constexpr MLPtr pick(Args... args) {
         constexpr uint32_t len = sizeof...(args);
         MLPtr result = next_op();
-        _commands.emplace_back(kArray.arg(len));
+        commands_.emplace_back(kArray.arg(len));
         ( ingest(args), ... );
         return result;
     }
 
    private:
     constexpr MLPtr next_op() const {
-        return MLPtr{uint32_t(_commands.size())};
+        return MLPtr{uint32_t(commands_.size())};
     }
     constexpr void ingest(std::string_view s) {
-        _commands.emplace_back(kLiteral.arg(_pool.push(s)));
+        commands_.emplace_back(kLiteral.arg(pool_.push(s)));
     }
     constexpr void ingest(MLPtr p) {
-        _commands.emplace_back(kCall.arg(p.address));
+        commands_.emplace_back(kCall.arg(p.address));
     }
     constexpr void ingest(MLOp op) {
-        _commands.emplace_back(op);
+        commands_.emplace_back(op);
     }
     constexpr void ingest(RandInt r) {
-        _commands.emplace_back(kRandInt.arg(r.lo));
-        _commands.emplace_back(r.hi - r.lo);
+        commands_.emplace_back(kRandInt.arg(r.lo));
+        commands_.emplace_back(r.hi - r.lo);
     }
 };
 

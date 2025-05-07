@@ -21,9 +21,9 @@ class LiteralPool {
         constexpr CompactLit(size_t offset, size_t len)
             : literal_offset(uint32_t(offset)), length(uint16_t(len)) {}
     };
-    encoder_type _encoder;
-    std::vector<uint8_t> _pool;
-    std::vector<CompactLit> _headers;
+    encoder_type encoder_;
+    std::vector<uint8_t> pool_;
+    std::vector<CompactLit> headers_;
 
    public:
     using LPIndex = uint16_t;
@@ -34,41 +34,41 @@ class LiteralPool {
         LPIndex i;
     };
 
-    constexpr LiteralPool(encoder_type encoder) : _encoder(encoder) {
-        _pool.reserve(65536);
+    constexpr LiteralPool(encoder_type encoder) : encoder_(encoder) {
+        pool_.reserve(65536);
     }
 
     constexpr size_t size() const {
-        return _headers.size();
+        return headers_.size();
     }
 
     constexpr LPIndex push(std::string_view s) {
-        LPIndex r = LPIndex(_headers.size());
-        _headers.emplace_back(_pool.size(), s.size());
-        auto& header = _headers.back();
-        header.checksum = _encoder(_pool, s);
-        header.literal_length = _pool.size() - header.literal_offset;
+        LPIndex r = LPIndex(headers_.size());
+        headers_.emplace_back(pool_.size(), s.size());
+        auto& header = headers_.back();
+        header.checksum = encoder_(pool_, s);
+        header.literal_length = pool_.size() - header.literal_offset;
         return r;
     }
 
     constexpr Literal get(LPIndex i) const {
-        CompactLit const& lit = _headers[i];
+        CompactLit const& lit = headers_[i];
         return Literal(
-                std::span(_pool).subspan(lit.literal_offset, lit.literal_length),
+                std::span(pool_).subspan(lit.literal_offset, lit.literal_length),
                 lit.length, lit.checksum, i);
     }
 };
 
 struct RawData {
     RawData() {}
-    RawData(std::span<uint8_t> out) : _out(out) {}
-    void reset() { _out.clear(); }
-    void reset(std::span<uint8_t> dest) { _out = dest; }
-    uint8_t* begin() const { return _out.begin(); }
-    uint8_t* end() const { return _out.end(); }
-    size_t size() const { return _out.size(); }
+    RawData(std::span<uint8_t> out) : out_(out) {}
+    void reset() { out_.clear(); }
+    void reset(std::span<uint8_t> dest) { out_ = dest; }
+    uint8_t* begin() const { return out_.begin(); }
+    uint8_t* end() const { return out_.end(); }
+    size_t size() const { return out_.size(); }
     std::tuple<uint32_t, uint32_t> tell() const {
-        return {_position, 0};
+        return {position_, 0};
     }
 
     constexpr void block_header() {}
@@ -76,31 +76,31 @@ struct RawData {
 
     // Should probably be virtual:
     constexpr void backref(uint16_t length, uint16_t distance) {
-        if (distance < _out.size()) {
-            _out.wr(std::span(_out.end() - distance, _out.end()));
+        if (distance < out_.size()) {
+            out_.wr(std::span(out_.end() - distance, out_.end()));
         } else {
             constexpr uint8_t oops[] = "###out of bounds backref###";
-            _out.wr(oops);
+            out_.wr(oops);
         }
         // checksum & length are caller's responsibility
     }
 
     // Should probably be virtual:
     constexpr void literal(std::span<const uint8_t> s) {
-        _out.wr(s);
+        out_.wr(s);
         // checksum & length are caller's responsibility
     }
 
     // Should probably be virtual:
     constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
         literal(blob.literal);
-        _position += blob.length;
+        position_ += blob.length;
     }
 
     // Should probably be virtual:
     constexpr void byte(uint8_t byte) {
-        _out.wr1(byte);
-        _position++;
+        out_.wr1(byte);
+        position_++;
     }
 
     // Should probably be virtual:
@@ -111,8 +111,8 @@ struct RawData {
             value /= 10;
             *--p = 0x30 + d;
         } while (value > 0);
-        _position += end - p;
-        _out.wr(std::span(p, end));
+        position_ += end - p;
+        out_.wr(std::span(p, end));
     }
 
     static constexpr uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
@@ -121,8 +121,8 @@ struct RawData {
     }
 
    protected:
-    ByteStuffer _out;
-    uint32_t _position = 0;
+    ByteStuffer out_;
+    uint32_t position_ = 0;
 
     uint32_t randint(uint32_t range, uint32_t start = 0) const {
         return rand() % range + start;
@@ -132,16 +132,16 @@ struct RawData {
 template <typename T_cksum = Adler32>
 struct Defl8bit : public RawData {
     std::tuple<uint32_t, uint32_t> tell() const {
-        return {_position, _checksum};
+        return {position_, checksum_};
     }
 
     constexpr void block_header() {
-        _out.wr(hufftable._header_blob);
+        out_.wr(hufftable.header_blob_);
     }
 
     constexpr void block_end() {
-        assert(hufftable._litcodelen[256] == 8);
-        _out.wr1(uint8_t(hufftable._litcode[256]));
+        assert(hufftable.litcodelen_[256] == 8);
+        out_.wr1(uint8_t(hufftable.litcode_[256]));
     }
 
     constexpr void backref(uint16_t length, uint16_t distance) {
@@ -153,8 +153,8 @@ struct Defl8bit : public RawData {
                 if (length - run == 2) run--;
             }
 
-            uint32_t bits = hufftable._match_table[run] | (uint32_t(hufftable._dist_table[distance]) << 9);
-            _out.wr3(bits);
+            uint32_t bits = hufftable.match_table_[run] | (uint32_t(hufftable.dist_table_[distance]) << 9);
+            out_.wr3(bits);
             length -= run;
         }
         // checksum & length are caller's responsibility
@@ -162,18 +162,18 @@ struct Defl8bit : public RawData {
 
     // Should probably be virtual:
     constexpr void literal(std::span<const uint8_t> s) {
-        _out.wr(s);
+        out_.wr(s);
         // checksum & length are caller's responsibility
     }
 
     constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
         int i = blob.i;
-        if (i >= _last_use.size()) {
-            _last_use.resize(i + 16, UINT32_MAX);
+        if (i >= last_use_.size()) {
+            last_use_.resize(i + 16, UINT32_MAX);
         }
-        uint32_t last_use = _last_use[i];
-        _last_use[i] = _position;
-        uint32_t distance = _position - last_use;
+        uint32_t last_use = last_use_[i];
+        last_use_[i] = position_;
+        uint32_t distance = position_ - last_use;
         bool hit = blob.length >= 3 && last_use != UINT32_MAX && distance <= 32768;
 
         if (hit) {
@@ -181,16 +181,16 @@ struct Defl8bit : public RawData {
         } else {
             literal(blob.literal);
         }
-        _position += blob.length;
-        _checksum.ffwd(blob.length);
-        _checksum.splice(blob.checksum);
+        position_ += blob.length;
+        checksum_.ffwd(blob.length);
+        checksum_.splice(blob.checksum);
     }
 
     constexpr void byte(uint8_t byte) {
-        assert(hufftable._litcodelen[byte] == 8);
-        _out.wr1(hufftable._litcode[byte]);
-        _checksum.add(byte);
-        _position++;
+        assert(hufftable.litcodelen_[byte] == 8);
+        out_.wr1(hufftable.litcode_[byte]);
+        checksum_.add(byte);
+        position_++;
     }
 
     constexpr void integer(uint32_t value) {
@@ -208,8 +208,8 @@ struct Defl8bit : public RawData {
         int utf_shift = 0;
         uint64_t utf_chunk = 0;
         for (uint8_t byte : s) {
-            int code = hufftable._litcode[byte];
-            int code_len = hufftable._litcodelen[byte];
+            int code = hufftable.litcode_[byte];
+            int code_len = hufftable.litcodelen_[byte];
             check.add(byte);
             if (byte < 0x80) {
                 assert(code_len == 8);
@@ -240,8 +240,8 @@ struct Defl8bit : public RawData {
     }
 
    protected:
-    std::vector<uint32_t> _last_use;
-    T_cksum _checksum;
+    std::vector<uint32_t> last_use_;
+    T_cksum checksum_;
 };
 
 struct GZip : public Defl8bit<CRC32> {
@@ -249,26 +249,26 @@ struct GZip : public Defl8bit<CRC32> {
     using Defl8bit<CRC32>::literal;
     using Defl8bit<CRC32>::randint;
     GZip() {}
-    GZip(std::span<uint8_t> dest) { _out = dest; }
+    GZip(std::span<uint8_t> dest) { out_ = dest; }
 
     void head(time_t time = 0) {
-        _out.wr1(0x1f);
-        _out.wr1(0x8b);
-        _out.wr1(0x08);
-        _out.wr1(0x01);  // text
-        _out.wr4(time);
-        _out.wr1(0);  // fast algorithm
-        _out.wr1(3);  // unix
+        out_.wr1(0x1f);
+        out_.wr1(0x8b);
+        out_.wr1(0x08);
+        out_.wr1(0x01);  // text
+        out_.wr4(time);
+        out_.wr1(0);  // fast algorithm
+        out_.wr1(3);  // unix
         block_header();
     }
 
     void tail() {
         block_end();
-        _out.wr4(_checksum.get(true));
-        _out.wr4(_position);
+        out_.wr4(checksum_.get(true));
+        out_.wr4(position_);
     }
    protected:
-    using Defl8bit<CRC32>::_last_use;
+    using Defl8bit<CRC32>::last_use_;
 };
 
 #endif  // !defined(DEFL8BIT_H_INCLUDED)

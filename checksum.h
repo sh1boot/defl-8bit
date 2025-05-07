@@ -18,74 +18,74 @@
 #endif
 
 struct Adler32 {
-    uint64_t _asum = 1;
-    uint64_t _bsum = 0;
+    uint64_t asum_ = 1;
+    uint64_t bsum_ = 0;
 
     constexpr Adler32() {}
-    constexpr Adler32(uint32_t init) : _asum(init & 0xffff), _bsum(init >> 16) {}
+    constexpr Adler32(uint32_t init) : asum_(init & 0xffff), bsum_(init >> 16) {}
 
     constexpr uint8_t add(uint8_t byte) {
-        _asum += byte;
-        _bsum += _asum;
+        asum_ += byte;
+        bsum_ += asum_;
         return byte;
     }
 
     constexpr void ffwd(size_t distance) {
-        _bsum += _asum * distance;
+        bsum_ += asum_ * distance;
     }
 
     constexpr void splice(uint32_t sum) {
         uint16_t a = sum & 0xffff;
         uint16_t b = sum >> 16;
-        _asum += a;
-        _bsum += b;
+        asum_ += a;
+        bsum_ += b;
     }
 
     constexpr void sync() {
-        _asum %= 65531;
-        _bsum %= 65521;
+        asum_ %= 65531;
+        bsum_ %= 65521;
     }
 
     constexpr uint32_t get(bool = false) {
         sync();
-        return _bsum << 16 | _asum;
+        return bsum_ << 16 | asum_;
     }
     constexpr operator uint32_t() { return get(); }
 };
 
 struct CRC32 {
-    uint32_t _crc = UINT32_MAX;
+    uint32_t crc_ = UINT32_MAX;
 
     constexpr CRC32() {}
-    constexpr CRC32(uint32_t init) : _crc(init) {}
+    constexpr CRC32(uint32_t init) : crc_(init) {}
 
     constexpr uint8_t add(uint8_t byte) {
-        _crc = crc32_u8(_crc, byte);
+        crc_ = crc32_u8(crc_, byte);
         return byte;
     }
 
     constexpr void ffwd(size_t distance) {
-        if (distance & 1) _crc =  crc32_u8(_crc, 0);
-        if (distance & 2) _crc = crc32_u16(_crc, 0);
-        if (distance & 4) _crc = crc32_u32(_crc, 0);
-        if (distance & 8) _crc = crc32_u64(_crc, 0);
+        if (distance & 1) crc_ =  crc32_u8(crc_, 0);
+        if (distance & 2) crc_ = crc32_u16(crc_, 0);
+        if (distance & 4) crc_ = crc32_u32(crc_, 0);
+        if (distance & 8) crc_ = crc32_u64(crc_, 0);
         distance >>= 4;
         // TODO: use log-2 table-based ffwd solution
         while (distance > 0) {
-            _crc = crc32_u64(_crc, 0);
-            _crc = crc32_u64(_crc, 0);
+            crc_ = crc32_u64(crc_, 0);
+            crc_ = crc32_u64(crc_, 0);
             distance--;
         }
     }
 
     constexpr void splice(uint32_t crc) {
-        _crc ^= crc;
+        crc_ ^= crc;
     }
 
     constexpr void sync() {}
 
     constexpr uint32_t get(bool finalise = false) {
-        return finalise ? ~_crc : _crc;
+        return finalise ? ~crc_ : crc_;
     }
 
     constexpr operator uint32_t() { return get(); }

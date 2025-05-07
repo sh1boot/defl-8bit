@@ -32,7 +32,7 @@ int main(void) {
 
     gz.head(time(NULL));
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 30; ++i) {
         gzip_catfacts.do_something(gz);
     }
 
