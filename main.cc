@@ -1,9 +1,12 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <ctime>
 #include <span>
 #include <vector>
+
+#include <unistd.h>
 
 #include "stuffer.h"
 #include "checksum.h"
@@ -12,66 +15,64 @@
 #include "ml.h"
 #include "catfacts.h"
 
-#pragma clang diagnostic ignored "-Wunused-variable"
-using GZML = ML<GZip>;
+int main(int argc, char * const* argv) {
+    int size = 32768;
+    int compressed = false;
 
-GZML ml;
-
-auto number = ml.pick("one", "two", "three");
-
-auto hello = ml("Hello world!\n",number," is greater than ",number,".\n");
-auto test = ml(" --This is a ",GZML::RandInt(10,20)," test-- ");
-auto cake = ml("CAKE 🍰 café ☕ colonoscopy 💩 !\n\n");
-auto theend = ml("That is all!\n");
-
-int main(void) {
     srand(time(NULL));
+
+    int opt;
+    while ((opt = getopt(argc, argv, "zs:l:")) != -1) {
+        switch (opt) {
+        case 'z': compressed = true;
+            break;
+        case 'l': size = strtoull(optarg, nullptr, 0);
+            break;
+        case 's': srand(strtoul(optarg, nullptr, 0));
+            break;
+        default: fprintf(stderr, "Usage: %s [-z] [-l length] [-s seed]\n",
+                         argv[0]);
+            exit(EXIT_FAILURE);
+        }
+    }
+    if (optind < argc) {
+        fprintf(stderr, "Unexpected leftover arguments.\n");
+        exit(EXIT_FAILURE);
+    }
+
     std::array<uint8_t, 0x10000> buffer;
 
-    ML<GZip>::Generator gz(gzip_catfacts, buffer);
-
-    gz.head(time(NULL));
-
-    for (int i = 0; i < 30; ++i) {
-        gzip_catfacts.do_something(gz);
-    }
-
-    gz.byte('\n');
-    gz.byte('c');
-    gz.byte('/');
-    gz.integer(54321);
-    gz.byte('/');
-    gz.byte('c');
-    gz.byte('\n');
-
-    gz.set_source(ml);
-    gz.decode(test);
-    gz.decode(hello);
-    gz.decode(test);
-    gz.decode(hello);
-    gz.decode(hello);
-    gz.decode(test);
-    gz.decode(cake);
-    gz.decode(number);
-    gz.decode(test);
-    gz.decode(hello);
-    gz.decode(theend);
-
-    gz.tail();
-
-    std::span<uint8_t> testfile(gz);
-
-    for (int i = 0; auto b : testfile) {
-        if ((i & 31) == 0) {
-            fprintf(stderr, "\n%3d:", i);
+    if (compressed) {
+        ML<GZip>::Generator gz(gzip_catfacts, buffer);
+        gz.head(time(NULL));
+        while (std::get<0>(gz.tell()) < size) {
+            gzip_catfacts.do_something(gz);
+            if (gz.size() > 0x8000) {
+                std::span<uint8_t> chunk(gz);
+                fwrite(chunk.data(), 1, chunk.size(), stdout);
+                gz.reset();
+            }
         }
-        if ((i & 7) == 0) fprintf(stderr, " ");
-        fprintf(stderr, " %02x", b);
-        ++i;
+        gz.tail();
+        std::span<uint8_t> chunk(gz);
+        fwrite(chunk.data(), 1, chunk.size(), stdout);
+        gz.reset();
+    } else {
+        ML<RawData>::Generator txt(raw_catfacts, buffer);
+        //txt.head(time(NULL));
+        while (std::get<0>(txt.tell()) < size) {
+            raw_catfacts.do_something(txt);
+            if (txt.size() > 0x8000) {
+                std::span<uint8_t> chunk(txt);
+                fwrite(chunk.data(), 1, chunk.size(), stdout);
+                txt.reset();
+            }
+        }
+        //txt.tail();
+        std::span<uint8_t> chunk(txt);
+        fwrite(chunk.data(), 1, chunk.size(), stdout);
+        txt.reset();
     }
-    fprintf(stderr, "\n");
-
-    fwrite(testfile.data(), 1, testfile.size(), stdout);
 
     return 0;
 }

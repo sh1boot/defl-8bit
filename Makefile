@@ -10,6 +10,6 @@ clean:
 	rm -f *.o demo demodata.gz
 
 run: demo
-	./$< > demodata.gz
+	./$< -l 100 -z > demodata.gz
 	cat demodata.gz | ~/bin/infgen
 	gunzip < demodata.gz | hexdump -C

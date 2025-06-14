@@ -59,9 +59,10 @@ class LiteralPool {
     }
 };
 
-struct RawData {
-    RawData() {}
-    RawData(std::span<uint8_t> out) : out_(out) {}
+template <typename T_cksum = NullChecksum>
+struct DeflBase {
+    DeflBase() {}
+    DeflBase(std::span<uint8_t> out) : out_(out) {}
     void reset() { out_.clear(); }
     void reset(std::span<uint8_t> dest) { out_ = dest; }
     uint8_t* begin() const { return out_.begin(); }
@@ -95,12 +96,15 @@ struct RawData {
     constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
         literal(blob.literal);
         position_ += blob.length;
+        checksum_.ffwd(blob.length);
+        checksum_.splice(blob.checksum);
     }
 
-    // Should probably be virtual:
+    // Should probably be virtual (but that sounds costly?):
     constexpr void byte(uint8_t byte) {
         out_.wr1(byte);
         position_++;
+        checksum_.add(byte);
     }
 
     // Should probably be virtual:
@@ -112,7 +116,7 @@ struct RawData {
             *--p = 0x30 + d;
         } while (value > 0);
         position_ += end - p;
-        out_.wr(std::span(p, end));
+        for (auto digit : std::span(p, end)) byte(digit);
     }
 
     static constexpr uint32_t literal_encoder(std::vector<uint8_t>& out, std::string_view s) {
@@ -121,18 +125,24 @@ struct RawData {
     }
 
    protected:
+    struct {
+        void assign(size_t, uint32_t) {}
+    } last_use_;
     ByteStuffer out_;
     uint32_t position_ = 0;
+    T_cksum checksum_;
 
     uint32_t randint(uint32_t range, uint32_t start = 0) const {
         return rand() % range + start;
     }
 };
 
+using RawData = DeflBase<NullChecksum>;
+
 template <typename T_cksum = Adler32>
-struct Defl8bit : public RawData {
+struct Defl8bit : public DeflBase<T_cksum> {
     std::tuple<uint32_t, uint32_t> tell() const {
-        return {position_, checksum_};
+        return {position_, checksum_.get()};
     }
 
     constexpr void block_header() {
@@ -241,7 +251,9 @@ struct Defl8bit : public RawData {
 
    protected:
     std::vector<uint32_t> last_use_;
-    T_cksum checksum_;
+    using DeflBase<T_cksum>::out_;
+    using DeflBase<T_cksum>::position_;
+    using DeflBase<T_cksum>::checksum_;
 };
 
 struct GZip : public Defl8bit<CRC32> {

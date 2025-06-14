@@ -17,7 +17,21 @@
 #elif 0 // TODO: test for RISCV, etc.
 #endif
 
-struct Adler32 {
+struct NullChecksum {
+    constexpr NullChecksum() {}
+    // constexpr NullChecksum(uint32_t) {}
+
+    constexpr uint8_t add(uint8_t byte) { return byte; }
+    constexpr void ffwd(size_t distance) {}
+    constexpr void splice(uint32_t sum) {}
+
+    constexpr void sync() {}
+
+    constexpr uint32_t get(bool = false) const { return 0; }
+    constexpr operator uint32_t() const { return get(); }
+};
+
+struct Adler32 : private NullChecksum {
     uint64_t asum_ = 1;
     uint64_t bsum_ = 0;
 
@@ -32,6 +46,7 @@ struct Adler32 {
 
     constexpr void ffwd(size_t distance) {
         bsum_ += asum_ * distance;
+        sync();
     }
 
     constexpr void splice(uint32_t sum) {
@@ -39,6 +54,7 @@ struct Adler32 {
         uint16_t b = sum >> 16;
         asum_ += a;
         bsum_ += b;
+        sync();
     }
 
     constexpr void sync() {
@@ -46,14 +62,14 @@ struct Adler32 {
         bsum_ %= 65521;
     }
 
-    constexpr uint32_t get(bool = false) {
-        sync();
-        return bsum_ << 16 | asum_;
+    constexpr uint32_t get(bool = false) const {
+        //sync();
+        return (bsum_ % 65521) << 16 | (asum_ % 65521);
     }
-    constexpr operator uint32_t() { return get(); }
+    constexpr operator uint32_t() const { return get(); }
 };
 
-struct CRC32 {
+struct CRC32 : private NullChecksum {
     uint32_t crc_ = UINT32_MAX;
 
     constexpr CRC32() {}
@@ -84,11 +100,11 @@ struct CRC32 {
 
     constexpr void sync() {}
 
-    constexpr uint32_t get(bool finalise = false) {
+    constexpr uint32_t get(bool finalise = false) const {
         return finalise ? ~crc_ : crc_;
     }
 
-    constexpr operator uint32_t() { return get(); }
+    constexpr operator uint32_t() const { return get(); }
 };
 
 #endif  // !defined(CHECKSUM_H_INCLUDED)
