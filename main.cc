@@ -42,11 +42,11 @@ int main(int argc, char * const* argv) {
     std::array<uint8_t, 0x10000> buffer;
 
     if (compressed) {
-        ML<GZip>::Generator gz(gzip_catfacts, buffer);
+        ML<GZip>::Generator gz(catfacts, buffer);
         gz.head(time(NULL));
         gz.seed(seed);
         while (std::get<0>(gz.tell()) < size) {
-            gzip_catfacts.do_something(gz);
+            catfacts.do_something(gz);
             if (gz.size() > 0x8000) {
                 std::span<uint8_t> chunk(gz);
                 fwrite(chunk.data(), 1, chunk.size(), stdout);
@@ -58,11 +58,11 @@ int main(int argc, char * const* argv) {
         fwrite(chunk.data(), 1, chunk.size(), stdout);
         gz.reset();
     } else {
-        ML<RawData>::Generator txt(raw_catfacts, buffer);
+        ML<RawData>::Generator txt(catfacts, buffer);
         //txt.head(time(NULL));
         txt.seed(seed);
         while (std::get<0>(txt.tell()) < size) {
-            raw_catfacts.do_something(txt);
+            catfacts.do_something(txt);
             if (txt.size() > 0x8000) {
                 std::span<uint8_t> chunk(txt);
                 fwrite(chunk.data(), 1, chunk.size(), stdout);

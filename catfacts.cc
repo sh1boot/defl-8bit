@@ -1,7 +1,7 @@
 #include "catfacts.h"
 
 template <typename T>
-constexpr CatFacts<T>::CatFacts() {
+constexpr CatFacts::CattyFactual<T>::CattyFactual() {
     auto authority_person = ml_.pick(
         "Dr Katz",
         "Donald J. Trump",
@@ -336,7 +336,9 @@ constexpr CatFacts<T>::CatFacts() {
     );
 }
 
-//constexpr Defl8bitTables hufftable;
-
-const/*expr*/ CatFacts<GZip> gzip_catfacts;
-const/*expr*/ CatFacts<RawData> raw_catfacts;
+#if 0  // TODO: get this working
+constexpr Defl8bitTables hufftable;
+constexpr CatFacts catfacts;
+#else
+const CatFacts catfacts;
+#endif
