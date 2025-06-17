@@ -2,13 +2,13 @@
 #define CHECKSUM_H_INCLUDED
 
 // TODO: constexpr implementation of CRC functions
-#include <arm_acle.h>
 #if defined(__ARM_FEATURE_CRC32)
+#include <arm_acle.h>
 #define crc32_u8(crc, x) __crc32b(crc, x)
 #define crc32_u16(crc, x) __crc32h(crc, x)
 #define crc32_u32(crc, x) __crc32w(crc, x)
 #define crc32_u64(crc, x) __crc32d(crc, x)
-#elif 1 // TODO: proper preprocessor test
+#elif defined(__amd64__) && defined(__CRC32__)
 #include <crc32intrin.h>
 #define crc32_u8(crc, x) _mm_crc32_u8(crc, x)
 #define crc32_u16(crc, x) _mm_crc32_u16(crc, x)

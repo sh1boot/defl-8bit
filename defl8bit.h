@@ -65,6 +65,7 @@ struct DeflBase {
     DeflBase(std::span<uint8_t> out) : out_(out) {}
     void reset() { out_.clear(); }
     void reset(std::span<uint8_t> dest) { out_ = dest; }
+    void seed(uint64_t seed) { prng_ = seed; }
     uint8_t* begin() const { return out_.begin(); }
     uint8_t* end() const { return out_.end(); }
     size_t size() const { return out_.size(); }
@@ -93,7 +94,7 @@ struct DeflBase {
     }
 
     // Should probably be virtual:
-    constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
+    constexpr void blob(LiteralPool::Literal blob) {
         literal(blob.literal);
         position_ += blob.length;
         checksum_.ffwd(blob.length);
@@ -130,10 +131,14 @@ struct DeflBase {
     } last_use_;
     ByteStuffer out_;
     uint32_t position_ = 0;
+    uint64_t prng_ = 0;
     T_cksum checksum_;
 
-    uint32_t randint(uint32_t range, uint32_t start = 0) const {
-        return rand() % range + start;
+    uint32_t randint(uint32_t range, uint32_t start = 0) {
+       uint64_t z = (prng_ += UINT64_C(0x9e3779b97f4a7c15));
+        z = (z ^ (z >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+       z = (z ^ (z >> 27)) * UINT64_C(0x94d049bb133111eb);
+       return (((z >> 32) * range) >> 32) + start;
     }
 };
 
@@ -176,7 +181,7 @@ struct Defl8bit : public DeflBase<T_cksum> {
         // checksum & length are caller's responsibility
     }
 
-    constexpr void literal(LiteralPool::Literal blob) { // TODO: misnamed
+    constexpr void blob(LiteralPool::Literal blob) {
         int i = blob.i;
         if (i >= last_use_.size()) {
             last_use_.resize(i + 16, UINT32_MAX);
@@ -256,10 +261,11 @@ struct Defl8bit : public DeflBase<T_cksum> {
     using DeflBase<T_cksum>::checksum_;
 };
 
-struct GZip : public Defl8bit<CRC32> {
-    using Defl8bit<CRC32>::integer;
-    using Defl8bit<CRC32>::literal;
-    using Defl8bit<CRC32>::randint;
+using GZipCksum = CRC32;
+struct GZip : public Defl8bit<GZipCksum> {
+    using Defl8bit<GZipCksum>::integer;
+    using Defl8bit<GZipCksum>::blob;
+    using Defl8bit<GZipCksum>::randint;
     GZip() {}
     GZip(std::span<uint8_t> dest) { out_ = dest; }
 
@@ -279,8 +285,9 @@ struct GZip : public Defl8bit<CRC32> {
         out_.wr4(checksum_.get(true));
         out_.wr4(position_);
     }
+
    protected:
-    using Defl8bit<CRC32>::last_use_;
+    using Defl8bit<GZipCksum>::last_use_;
 };
 
 #endif  // !defined(DEFL8BIT_H_INCLUDED)

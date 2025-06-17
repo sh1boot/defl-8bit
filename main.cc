@@ -18,8 +18,7 @@
 int main(int argc, char * const* argv) {
     int size = 32768;
     int compressed = false;
-
-    srand(time(NULL));
+    uint64_t seed = time(NULL);
 
     int opt;
     while ((opt = getopt(argc, argv, "zs:l:")) != -1) {
@@ -28,7 +27,7 @@ int main(int argc, char * const* argv) {
             break;
         case 'l': size = strtoull(optarg, nullptr, 0);
             break;
-        case 's': srand(strtoul(optarg, nullptr, 0));
+        case 's': seed = strtoull(optarg, nullptr, 0);
             break;
         default: fprintf(stderr, "Usage: %s [-z] [-l length] [-s seed]\n",
                          argv[0]);
@@ -45,6 +44,7 @@ int main(int argc, char * const* argv) {
     if (compressed) {
         ML<GZip>::Generator gz(gzip_catfacts, buffer);
         gz.head(time(NULL));
+        gz.seed(seed);
         while (std::get<0>(gz.tell()) < size) {
             gzip_catfacts.do_something(gz);
             if (gz.size() > 0x8000) {
@@ -60,6 +60,7 @@ int main(int argc, char * const* argv) {
     } else {
         ML<RawData>::Generator txt(raw_catfacts, buffer);
         //txt.head(time(NULL));
+        txt.seed(seed);
         while (std::get<0>(txt.tell()) < size) {
             raw_catfacts.do_something(txt);
             if (txt.size() > 0x8000) {

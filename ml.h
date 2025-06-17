@@ -33,7 +33,7 @@ struct ML {
 
        public:
         using T::integer;
-        using T::literal;
+        using T::blob;
         using T::randint;
         Generator(ML const& ml) : ml_(&ml) {
             last_use_.assign(ml_->commands_.size(), UINT32_MAX);
@@ -67,7 +67,7 @@ struct ML {
                     decode(MLPtr{i + randint(arg, 0)}, true);
                     return;
                 case kLiteral.op():
-                    literal(ml_->pool_.get(arg));
+                    blob(ml_->pool_.get(arg));
                     break;
                 case kRandInt.op():
                     integer(randint(ml_->commands_[i++].word, arg));
