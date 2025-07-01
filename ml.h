@@ -3,9 +3,43 @@
 
 #include "defl8bit.h"
 
-template <typename T>
+template <typename T, size_t Capacity>
+using my_inplace_vector = std::vector<T>;
+
+template <typename T, size_t PoolSize = 65536, size_t MaxHeaders = 8192, size_t MaxCommands = 8192>
 struct ML {
-    LiteralPool pool_{T::literal_encoder};
+    class LiteralPool {
+        struct Header {
+            uint32_t literal_offset;
+            uint32_t checksum;
+            uint16_t length, literal_length;
+            constexpr Header(std::string_view s, auto& storage)
+                : literal_offset(storage.size()),
+                checksum(T::encode_literal(storage, s)),
+                length(s.size()),
+                literal_length(storage.size() - literal_offset) {}
+        };
+        my_inplace_vector<uint8_t, PoolSize> storage_;
+        my_inplace_vector<Header, MaxHeaders> headers_;
+
+    public:
+        using LPIndex = typename EncoderLiteral::LPIndex;
+        constexpr LiteralPool() {
+            storage_.reserve(PoolSize);
+            headers_.reserve(MaxHeaders);
+        }
+
+        constexpr LPIndex push(std::string_view s) {
+            LPIndex r = LPIndex(headers_.size());
+            headers_.emplace_back(s, storage_);
+            return r;
+        }
+
+        constexpr EncoderLiteral operator[](LPIndex i) const {
+            return EncoderLiteral(headers_[i], storage_, i);
+        }
+    };
+    LiteralPool pool_;
     struct MLPtr {
         uint32_t address;
     };
@@ -25,7 +59,7 @@ struct ML {
     static constexpr MLOp kRandInt{0xfc000000};
     static constexpr MLOp kProbability{0xfb000000};
 
-    std::vector<MLOp> commands_;
+    my_inplace_vector<MLOp, MaxCommands> commands_;
 
     class Generator : public T {
         ML const* ml_;
@@ -67,7 +101,7 @@ struct ML {
                     decode(MLPtr{i + randint(arg, 0)}, true);
                     return;
                 case kLiteral.op():
-                    blob(ml_->pool_.get(arg));
+                    blob(ml_->pool_[arg]);
                     break;
                 case kRandInt.op():
                     integer(randint(ml_->commands_[i++].word, arg));
