@@ -64,11 +64,10 @@ static constexpr class CRCTables {
 static constexpr uint64_t clmul(uint32_t x, uint32_t y) {
 #if defined(__ARM_FEATURE_CRYPTO)
     if (!std::is_constant_evaluated()) {
-        auto x64 = vcreate_p64(x);
-        auto y64 = vcreate_p64(y);
-        // TODO: why does vmull_p64 use weird types?
-        auto out = vmull_p64((poly64_t)x64, (poly64_t)y64);
-        return vgetq_lane_u64((uint64x2_t)out, 0);
+        auto x64 = vget_lane_p64(vcreate_p64(x), 0);
+        auto y64 = vget_lane_p64(vcreate_p64(y), 0);
+        auto out = vmull_p64(x64, y64);
+        return vgetq_lane_u64(vreinterpretq_u64_p128(out), 0);
     }
 #endif
 #if defined(__AVX__)
