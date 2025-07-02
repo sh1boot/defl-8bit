@@ -1,26 +1,19 @@
 #if !defined(CHECKSUM_H_INCLUDED)
 #define CHECKSUM_H_INCLUDED
 
-// TODO: constexpr implementation of CRC functions
+#if defined(__ARM_FEATURE_CRYPTO)
+#include <arm_neon.h>
+#elif defined(__amd64__) && defined(__PCLMUL__)
+#include <wmmintrin.h>
+#endif
+
 #if defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
-#include <arm_neon.h>
-#define crc32_u8(crc, x) __crc32b(crc, x)
-#define crc32_u16(crc, x) __crc32h(crc, x)
-#define crc32_u32(crc, x) __crc32w(crc, x)
-#define crc32_u64(crc, x) __crc32d(crc, x)
-#elif defined(__amd64__) && defined(__CRC32__)
-#include <wmmintrin.h>
-#define crc32_u8(crc, x) _mm_crc32_u8(crc, x)
-#define crc32_u16(crc, x) _mm_crc32_u16(crc, x)
-#define crc32_u32(crc, x) _mm_crc32_u32(crc, x)
-#define crc32_u64(crc, x) _mm_crc32_u64(crc, x)
-#elif 0 // TODO: test for RISCV, etc.
 #endif
 
 namespace {
 namespace CRCTools {
-static constexpr class CRCTables {
+static constexpr struct CRCTables {
     template <size_t N = 8>
     static constexpr uint32_t basic_crc(uint32_t crc, uint64_t x = 0) {
         x &= ~(uint64_t(-2) << (N - 1));
@@ -41,7 +34,7 @@ static constexpr class CRCTables {
         return crc;
     }
 
-    public:
+   public:
     constexpr CRCTables() {
         for (int i = 0; i < 8; ++i) {
             for (uint64_t j = 0; j < 256; ++j) {
@@ -61,24 +54,20 @@ static constexpr class CRCTables {
     uint32_t ffwd_[kFfwdTableSize];
 } tables;
 
-static constexpr uint64_t clmul(uint32_t x, uint32_t y) {
-#if defined(__ARM_FEATURE_CRYPTO)
+static constexpr uint64_t clmul(uint64_t x, uint64_t y) {
     if (!std::is_constant_evaluated()) {
+#if defined(__ARM_FEATURE_CRYPTO)
         auto x64 = vget_lane_p64(vcreate_p64(x), 0);
         auto y64 = vget_lane_p64(vcreate_p64(y), 0);
         auto out = vmull_p64(x64, y64);
         return vgetq_lane_u64(vreinterpretq_u64_p128(out), 0);
-    }
-#endif
-#if defined(__AVX__)
-    // Avoid hardware intrinsic when computing compile-time constants.
-    if (!std::is_constant_evaluated()) {
-        auto x128 = _mm_cvtsi32_si128(x);
-        auto y128 = _mm_cvtsi32_si128(y);
+#elif defined(__AVX__)
+        auto x128 = _mm_cvtsi64_si128(x);
+        auto y128 = _mm_cvtsi64_si128(y);
         auto r128 = _mm_clmulepi64_si128(x128, y128, 0x00);
         return _mm_cvtsi128_si64(r128);
-    }
 #endif
+    }
 
     uint64_t r = 0;
     for (int i = 0; i < 32; ++i) {
@@ -92,23 +81,35 @@ static constexpr uint64_t clmul(uint32_t x, uint32_t y) {
 template <size_t N = 8>
 uint32_t crc(uint32_t crc, uint64_t x = 0) {
     switch (N) {
-#ifdef crc32_u8
-        case 8: return crc32_u8(crc, x);
+#if defined(__ARM_FEATURE_CRC32)
+    case 8: return __crc32b(crc, x);
+    case 16: return __crc32h(crc, x);
+    case 32: return __crc32w(crc, x);
+    case 64: return __crc32d(crc, x);
+#elif __has_builtin(__builtin_rev_crc32_data8)
+    case 8 : return __builtin_rev_crc32_data8(crc, x, 0x04c11db7);
+    case 16: return __builtin_rev_crc32_data16(crc, x, 0x04c11db7);
+    case 32: return __builtin_rev_crc32_data32(crc, x, 0x04c11db7);
+    case 64: return uint32_t(__builtin_rev_crc32_data32(uint32_t(crc), x, 0x04c11db700000000));
 #endif
-#ifdef crc32_u16
-        case 16: return crc32_u16(crc, x);
-#endif
-#ifdef crc32_u32
-        case 32: return crc32_u32(crc, x);
-#endif
-#ifdef crc32_u64
-        case 64: return crc32_u64(crc, x);
-#endif
+        default: break;
     }
+    constexpr uint64_t mask = ~(-uint64_t(2) << (N - 1));
+    constexpr uint64_t k1 = 0xb4e5b025f7011641 & (mask & 0xffffffff);   // 2^128 / 0x104c11db7
+    constexpr uint64_t k2 = 0x1db710640;                                // bitrev64(0x04c11db7) * 2
+
     x ^= crc;
-    crc = 0;
-    for (int i = 0; i < N / 8; ++i) {
-        crc ^= tables.crcbyte_[(64 - N) / 8 + i][(x >> (i * 8)) & 255];
+    uint64_t a = clmul(x, k1) & (mask & 0xffffffff);
+    uint64_t b = clmul(a, k2);
+    b ^= x;
+    if (N <= 32) {
+        crc = b >> N;
+    } else {
+        x = b >> 32;
+        a = clmul(x, k1) & (mask >> 32);
+        b = clmul(a, k2);
+        b ^= x;
+        crc = b >> (N - 32);
     }
     return crc;
 }
