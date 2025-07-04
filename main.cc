@@ -39,7 +39,10 @@ int main(int argc, char * const* argv) {
         exit(EXIT_FAILURE);
     }
 
-    std::array<uint8_t, 0x10000> buffer;
+    static constexpr size_t kBufferSafety = 0x4000;
+    static constexpr size_t kBufferSize = 0x100000 + kBufferSafety;
+    static constexpr size_t kBufferLimit = kBufferSize - kBufferSafety;
+    std::array<uint8_t, kBufferSize> buffer;
 
     if (compressed) {
         ML<GZip>::Generator gz(catfacts, buffer);
@@ -47,7 +50,8 @@ int main(int argc, char * const* argv) {
         gz.seed(seed);
         while (std::get<0>(gz.tell()) < size) {
             catfacts.do_something(gz);
-            if (gz.size() > 0x8000) {
+            if (gz.size() >= kBufferLimit) {
+                assert(gz.size() < kBufferSize);
                 std::span<uint8_t> chunk(gz);
                 fwrite(chunk.data(), 1, chunk.size(), stdout);
                 gz.reset();
@@ -63,7 +67,8 @@ int main(int argc, char * const* argv) {
         txt.seed(seed);
         while (std::get<0>(txt.tell()) < size) {
             catfacts.do_something(txt);
-            if (txt.size() > 0x8000) {
+            if (txt.size() >= kBufferLimit) {
+                assert(txt.size() < kBufferSize);
                 std::span<uint8_t> chunk(txt);
                 fwrite(chunk.data(), 1, chunk.size(), stdout);
                 txt.reset();

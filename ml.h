@@ -39,7 +39,6 @@ struct ML {
             return EncoderLiteral(headers_[i], storage_, i);
         }
     };
-    LiteralPool pool_;
     struct MLPtr {
         uint32_t address;
     };
@@ -58,8 +57,6 @@ struct ML {
     static constexpr MLOp kLiteral{0xfd000000};
     static constexpr MLOp kRandInt{0xfc000000};
     static constexpr MLOp kProbability{0xfb000000};
-
-    my_inplace_vector<MLOp, MaxCommands> commands_;
 
     class Generator : public T {
         ML const* ml_;
@@ -132,6 +129,9 @@ struct ML {
         ( ingest(args), ... );
         return result;
     }
+
+    LiteralPool pool_;
+    my_inplace_vector<MLOp, MaxCommands> commands_;
 
    private:
     constexpr MLPtr next_op() const {
