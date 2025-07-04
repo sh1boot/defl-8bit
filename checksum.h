@@ -78,6 +78,30 @@ static constexpr uint64_t clmul(uint64_t x, uint64_t y) {
     return r;
 }
 
+static constexpr uint64_t clmul_high(uint64_t x, uint64_t y) {
+    if (!std::is_constant_evaluated()) {
+#if defined(__ARM_FEATURE_CRYPTO)
+        auto x64 = vget_lane_p64(vcreate_p64(x), 0);
+        auto y64 = vget_lane_p64(vcreate_p64(y), 0);
+        auto out = vmull_p64(x64, y64);
+        return vgetq_lane_u64(vreinterpretq_u64_p128(out), 1);
+#elif defined(__AVX__)
+        auto x128 = _mm_cvtsi64_si128(x);
+        auto y128 = _mm_cvtsi64_si128(y);
+        auto r128 = _mm_clmulepi64_si128(x128, y128, 0x00);
+        return _mm_extract_epi64(r128, 1);
+#endif
+    }
+
+    uint64_t r = 0;
+    for (int i = 0; i < 32; ++i) {
+        x >>= 1;
+        if (y & 0x80000000) r ^= x;
+        y <<= 1;
+    }
+    return r;
+}
+
 template <size_t N = 8>
 uint32_t crc(uint32_t crc, uint64_t x = 0) {
     switch (N) {
@@ -95,23 +119,18 @@ uint32_t crc(uint32_t crc, uint64_t x = 0) {
         default: break;
     }
     constexpr uint64_t mask = ~(-uint64_t(2) << (N - 1));
-    constexpr uint64_t k1 = 0xb4e5b025f7011641 & (mask & 0xffffffff);   // 2^128 / 0x104c11db7
-    constexpr uint64_t k2 = 0x1db710640;                                // bitrev64(0x04c11db7) * 2
+    constexpr uint64_t k1 = 0xb4e5b025f7011641;   // bitrev64(2^128 / 0x104c11db7)
+    constexpr uint64_t k2 = 0x1db710640;          // bitrev64(0x04c11db7) * 2
 
     x ^= crc;
-    uint64_t a = clmul(x, k1) & (mask & 0xffffffff);
-    uint64_t b = clmul(a, k2);
-    b ^= x;
+    uint64_t a = clmul(x, k1 & mask) & mask;
     if (N <= 32) {
-        crc = b >> N;
-    } else {
-        x = b >> 32;
-        a = clmul(x, k1) & (mask >> 32);
-        b = clmul(a, k2);
-        b ^= x;
-        crc = b >> (N - 32);
+        uint64_t b = clmul(a, k2);
+        if (N < 32) b ^= x;
+        return b >> N;
     }
-    return crc;
+    uint64_t b = clmul_high(a, k2);
+    return b;
 }
 
 uint32_t ffwd(uint32_t crc, uint32_t n) {
