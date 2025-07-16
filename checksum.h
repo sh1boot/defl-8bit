@@ -4,6 +4,7 @@
 #if defined(__ARM_FEATURE_CRYPTO)
 #include <arm_neon.h>
 #elif defined(__amd64__) && defined(__PCLMUL__)
+#include <smmintrin.h>
 #include <wmmintrin.h>
 #endif
 
@@ -61,7 +62,7 @@ static constexpr uint64_t clmul(uint64_t x, uint64_t y) {
         auto y64 = vget_lane_p64(vcreate_p64(y), 0);
         auto out = vmull_p64(x64, y64);
         return vgetq_lane_u64(vreinterpretq_u64_p128(out), 0);
-#elif defined(__AVX__)
+#elif defined(__PCLMUL__)
         auto x128 = _mm_cvtsi64_si128(x);
         auto y128 = _mm_cvtsi64_si128(y);
         auto r128 = _mm_clmulepi64_si128(x128, y128, 0x00);
@@ -85,7 +86,7 @@ static constexpr uint64_t clmul_high(uint64_t x, uint64_t y) {
         auto y64 = vget_lane_p64(vcreate_p64(y), 0);
         auto out = vmull_p64(x64, y64);
         return vgetq_lane_u64(vreinterpretq_u64_p128(out), 1);
-#elif defined(__AVX__)
+#elif defined(__PCLMUL__)
         auto x128 = _mm_cvtsi64_si128(x);
         auto y128 = _mm_cvtsi64_si128(y);
         auto r128 = _mm_clmulepi64_si128(x128, y128, 0x00);
