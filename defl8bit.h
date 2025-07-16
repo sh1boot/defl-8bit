@@ -44,7 +44,7 @@ struct EncoderBase {
     constexpr void block_head() {}
     constexpr void block_tail() {}
 
-    static constexpr uint32_t encode_literal(std::vector<uint8_t>& out, std::string_view s) {
+    static constexpr uint32_t encode_literal(auto& out, std::string_view s) {
         out.insert(out.end(), s.begin(), s.end());
         return 0;
     }
@@ -132,7 +132,7 @@ class Defl8bit : public EncoderBase<T_cksum> {
         out_.wr1(uint8_t(hufftable.litcode_[256]));
     }
 
-    static constexpr uint32_t encode_literal(std::vector<uint8_t>& out, std::string_view s) {
+    static constexpr uint32_t encode_literal(auto& out, std::string_view s) {
         T_cksum check(0);
         int utf_shift = 0;
         uint64_t utf_chunk = 0;

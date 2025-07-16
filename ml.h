@@ -2,9 +2,11 @@
 #define ML_H_INCLUDED
 
 #include "defl8bit.h"
+#include "inplace_vector.h"
 
 template <typename T, size_t Capacity>
-using my_inplace_vector = std::vector<T>;
+//using my_inplace_vector = std::vector<T>;
+using my_inplace_vector = inplace_vector<T, Capacity>;
 
 template <typename T, size_t PoolSize = 65536, size_t MaxHeaders = 8192, size_t MaxCommands = 8192>
 struct ML {
@@ -13,6 +15,7 @@ struct ML {
             uint32_t literal_offset;
             uint32_t checksum;
             uint16_t length, literal_length;
+            constexpr Header() : literal_offset{0}, checksum{0}, length{0}, literal_length{0} {}
             constexpr Header(std::string_view s, auto& storage)
                 : literal_offset(storage.size()),
                 checksum(T::encode_literal(storage, s)),
@@ -24,10 +27,6 @@ struct ML {
 
     public:
         using LPIndex = typename EncoderLiteral::LPIndex;
-        constexpr LiteralPool() {
-            storage_.reserve(PoolSize);
-            headers_.reserve(MaxHeaders);
-        }
 
         constexpr LPIndex push(std::string_view s) {
             LPIndex r = LPIndex(headers_.size());
