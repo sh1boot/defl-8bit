@@ -1,7 +1,7 @@
 CXX=clang++
-CXXFLAGS=-std=c++20 -pedantic -Wall -Werror -O3 -mcpu=native
+CXXFLAGS=-std=c++20 -pedantic -Wall -Werror -O3 -march=native
 
-demo: main.o catfacts.o huffman.o
+demo: main.o catfacts.o
 	${CXX} ${CXXFLAGS} ${LDFLAGS} $^ -o $@
 
 main.o: main.cc *.h

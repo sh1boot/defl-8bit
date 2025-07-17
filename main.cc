@@ -10,7 +10,6 @@
 
 #include "stuffer.h"
 #include "checksum.h"
-#include "huffman.h"
 #include "defl8bit.h"
 #include "ml.h"
 #include "catfacts.h"

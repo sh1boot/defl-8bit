@@ -272,6 +272,8 @@ struct Defl8bitTables {
     }
 };
 
-extern const Defl8bitTables hufftable;
+namespace {
+constexpr Defl8bitTables hufftable;
+}
 
 #endif  // !defined(HUFFMANH_H_INCLUDED)
