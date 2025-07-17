@@ -336,9 +336,4 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
     );
 }
 
-#if 0  // TODO: get this working
-constexpr Defl8bitTables hufftable;
 constexpr CatFacts catfacts;
-#else
-const CatFacts catfacts;
-#endif
