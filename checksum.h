@@ -69,11 +69,10 @@ static constexpr uint64_t clmul(uint64_t x, uint64_t y) {
         return _mm_cvtsi128_si64(r128);
 #endif
     }
-
     uint64_t r = 0;
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < 64; ++i) {
         r <<= 1;
-        if (y & 0x80000000) r ^= x;
+        if (y & 0x8000000000000000) r ^= x;
         y <<= 1;
     }
     return r;
@@ -95,31 +94,34 @@ static constexpr uint64_t clmul_high(uint64_t x, uint64_t y) {
     }
 
     uint64_t r = 0;
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < 64; ++i) {
         x >>= 1;
-        if (y & 0x80000000) r ^= x;
+        if (y & 0x8000000000000000) r ^= x;
         y <<= 1;
     }
     return r;
 }
 
 template <size_t N = 8>
-uint32_t crc(uint32_t crc, uint64_t x = 0) {
-    switch (N) {
+static constexpr uint32_t crc(uint32_t crc, uint64_t x = 0) {
+    if (!std::is_constant_evaluated()) {
+        switch (N) {
 #if defined(__ARM_FEATURE_CRC32)
-    case 8: return __crc32b(crc, x);
-    case 16: return __crc32h(crc, x);
-    case 32: return __crc32w(crc, x);
-    case 64: return __crc32d(crc, x);
+        case 8: return __crc32b(crc, x);
+        case 16: return __crc32h(crc, x);
+        case 32: return __crc32w(crc, x);
+        case 64: return __crc32d(crc, x);
 #elif __has_builtin(__builtin_rev_crc32_data8)
-    case 8 : return __builtin_rev_crc32_data8(crc, x, 0x04c11db7);
-    case 16: return __builtin_rev_crc32_data16(crc, x, 0x04c11db7);
-    case 32: return __builtin_rev_crc32_data32(crc, x, 0x04c11db7);
-    case 64: return uint32_t(__builtin_rev_crc32_data32(uint32_t(crc), x, 0x04c11db700000000));
+        case 8 : return __builtin_rev_crc32_data8(crc, x, 0x04c11db7);
+        case 16: return __builtin_rev_crc32_data16(crc, x, 0x04c11db7);
+        case 32: return __builtin_rev_crc32_data32(crc, x, 0x04c11db7);
+        case 64: return uint32_t(__builtin_rev_crc32_data32(uint32_t(crc), x, 0x04c11db700000000));
 #endif
-        default: break;
+            default: break;
+        }
     }
     constexpr uint64_t mask = ~(-uint64_t(2) << (N - 1));
+#if 1  // TODO: seems to compile badly on x86
     constexpr uint64_t k1 = 0xb4e5b025f7011641;   // bitrev64(2^128 / 0x104c11db7)
     constexpr uint64_t k2 = 0x1db710640;          // bitrev64(0x04c11db7) * 2
 
@@ -132,6 +134,25 @@ uint32_t crc(uint32_t crc, uint64_t x = 0) {
     }
     uint64_t b = clmul_high(a, k2);
     return b;
+#else
+    constexpr uint64_t k1 = 0xb4e5b025f7011641 & (mask & 0xffffffff);   // 2^128 / 0x104c11db7
+    constexpr uint64_t k2 = 0x1db710640;                                // bitrev64(0x04c11db7) * 2
+
+    x ^= crc;
+    uint64_t a = clmul(x, k1) & (mask & 0xffffffff);
+    uint64_t b = clmul(a, k2);
+    b ^= x;
+    if (N <= 32) {
+        crc = b >> N;
+    } else {
+        x = b >> 32;
+        a = clmul(x, k1) & (mask >> 32);
+        b = clmul(a, k2);
+        b ^= x;
+        crc = b >> (N - 32);
+    }
+    return crc;
+#endif
 }
 
 uint32_t ffwd(uint32_t crc, uint32_t n) {
