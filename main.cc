@@ -44,7 +44,7 @@ int main(int argc, char * const* argv) {
     std::array<uint8_t, kBufferSize> buffer;
 
     if (compressed) {
-        ML<GZip>::Generator gz(catfacts, buffer);
+        GZip gz(buffer);
         gz.head(time(NULL));
         gz.seed(seed);
         while (std::get<0>(gz.tell()) < size) {
@@ -61,7 +61,7 @@ int main(int argc, char * const* argv) {
         fwrite(chunk.data(), 1, chunk.size(), stdout);
         gz.reset();
     } else {
-        ML<RawData>::Generator txt(catfacts, buffer);
+        RawData txt(buffer);
         //txt.head(time(NULL));
         txt.seed(seed);
         while (std::get<0>(txt.tell()) < size) {

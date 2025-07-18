@@ -49,6 +49,14 @@ struct EncoderBase {
         return 0;
     }
 
+    uint32_t randint(uint32_t range, uint32_t start = 0) {
+       uint64_t z = prng_;
+       prng_ += UINT64_C(0x9e3779b97f4a7c15);
+       z = (z ^ (z >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+       z = (z ^ (z >> 27)) * UINT64_C(0x94d049bb133111eb);
+       return (((z >> 32) * range) >> 32) + start;
+    }
+
     // Should probably be virtual:
     constexpr void backref(uint16_t length, uint16_t distance) {
         if (distance < out_.size()) {
@@ -101,14 +109,6 @@ struct EncoderBase {
     uint32_t position_ = 0;
     uint64_t prng_ = 1;
     T_cksum checksum_;
-
-    uint32_t randint(uint32_t range, uint32_t start = 0) {
-       uint64_t z = prng_;
-       prng_ += UINT64_C(0x9e3779b97f4a7c15);
-       z = (z ^ (z >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
-       z = (z ^ (z >> 27)) * UINT64_C(0x94d049bb133111eb);
-       return (((z >> 32) * range) >> 32) + start;
-    }
 };
 
 using RawData = EncoderBase<NullChecksum>;

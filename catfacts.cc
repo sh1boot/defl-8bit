@@ -1,77 +1,81 @@
 #include "catfacts.h"
 
 template <typename T>
-constexpr CatFacts::CattyFactual<T>::CattyFactual() {
-    auto authority_person = ml_.pick(
+static constexpr ML::GenBuilder<T> cat_facts() {
+    ML::GenBuilder<T> ml;
+    auto authority_person = ml.pick(
         "Dr Katz",
         "Donald J. Trump",
         "Lion-O, Lord of the ThunderCats",
         "Ash Ketchum"
     );
-    auto book_title = ml_.pick(
+    auto book_title = ml.pick(
         "Generic Cat Book",
         "1001 Facts About Cats"
     );
-    auto regional = ml_.pick(
+    auto regional = ml.pick(
         "American",
         "Canadian",
         "International",
         "Interstellar",
         "Intergalactic",
-        "Internal"
+        "Internal",
+        "American",
+        "American",
+        "American"
     );
-    auto organisation = ml_.pick(
-        ml_("The ",regional," Cat Club"),
-        ml_("The ",regional," Cat Enthusiasts' Club"),
-        ml_("The ",regional," Cat Euthanists' Club")
+    auto organisation = ml.pick(
+        ml("The ",regional," Cat Club"),
+        ml("The ",regional," Cat Enthusiasts' Club"),
+        ml("The ",regional," Cat Euthanists' Club")
     );
-    auto credential = ml_.pick(
-        ml_(", author of ",book_title),
-        ml_(", founder of ",organisation)
+    auto credential = ml.pick(
+        ml(", author of ",book_title),
+        ml(", founder of ",organisation)
     );
-    auto front_authority = ml_.pick(
-        ml_("According to ",authority_person,", "),
-        ml_(authority_person,credential," says, ")
+    auto front_authority = ml.pick(
+        ml("According to ",authority_person,", "),
+        ml(authority_person,credential," says, ")
     );
-    auto attests = ml_.pick(
+    auto attests = ml.pick(
         ", according to ",
         ", says ",
         ", writes "
     );
-    auto back_authority = ml_.pick(
+    auto back_authority = ml.pick(
         "",
-        ml_(attests, authority_person),
-        ml_(attests, authority_person, credential)
+        ml(attests, authority_person),
+        ml(attests, authority_person, credential)
     );
-    auto preamble = ml_.pick(
+    auto preamble = ml.pick(
         "Did you know, ",
         "Fun fact: ",
         front_authority
     );
-    auto breed = ml_.pick(
+    auto breed = ml.pick(
         "brown cats",
         "blue cats",
         "tigers"
     );
 
-    auto ability = ml_.pick(
+    auto ability = ml.pick(
         " can jump as high as ",
         " can tell jokes as funny as ",
         " are better than "
     );
-    auto reference = ml_.pick(
+    auto reference = ml.pick(
         "goats",
         "the Eiffel Tower",
         breed,
         authority_person
     );
-    auto can_be = ml_.pick(
+    auto can_be = ml.pick(
         "toilet trained",
         "as tall as a small horse",
         "quite fast",
         "president"
     );
-    auto comment = ml_.pick(
+    auto comment = ml.pick(
         "",
         "",
         "",
@@ -82,7 +86,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "  Just like people!"
     );
 
-    auto Number = ml_.pick(
+    auto Number = ml.pick(
         "5",
         "20",
         "50",
@@ -94,7 +98,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "2",
         "33"
     );
-    auto BodyPart = ml_.pick(
+    auto BodyPart = ml.pick(
         "tail",
         "paw",
         "ear",
@@ -112,7 +116,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "claw",
         "mouth"
     );
-    auto Occupation = ml_.pick(
+    auto Occupation = ml.pick(
         "superhero",
         "astronaut",
         "detective",
@@ -120,7 +124,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "chef",
         "artist"
     );
-    auto Verb_ing = ml_.pick(
+    auto Verb_ing = ml.pick(
         "meowing",
         "purring",
         "jumping",
@@ -134,7 +138,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "scratching",
         "biting"
     );
-    auto PluralNoun = ml_.pick(
+    auto Noun_s = ml.pick(
         "dogs",
         "trees",
         "shoes",
@@ -147,7 +151,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "insects",
         "dogs"
     );
-    auto FunnyNoun = ml_.pick(
+    auto FunnyNoun = ml.pick(
         "disco",
         "spaghetti",
         "unicorn",
@@ -155,7 +159,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "volcano",
         "noodle"
     );
-    auto TrendOrTopic = ml_.pick(
+    auto TrendOrTopic = ml.pick(
         "TikTok dances",
         "gluten-free food",
         "cryptocurrency",
@@ -163,7 +167,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "avocado toast",
         "vintage vinyl records"
     );
-    auto WeirdSound = ml_.pick(
+    auto WeirdSound = ml.pick(
         "honk",
         "beep",
         "kazoo",
@@ -171,7 +175,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "boing",
         "chirp"
     );
-    auto Noun = ml_.pick(
+    auto Noun = ml.pick(
         "sugar",
         "chocolate",
         "honey",
@@ -179,7 +183,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "cake",
         "marshmallow"
     );
-    auto Emotion = ml_.pick(
+    auto Emotion = ml.pick(
         "confusion",
         "joy",
         "excitement",
@@ -195,7 +199,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "peace",
         "calm"
     );
-    auto Possession = ml_.pick(
+    auto Possession = ml.pick(
         "jewelry",
         "a golden cup",
         "a small pillow",
@@ -204,7 +208,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "incense",
         "food"
     );
-    auto Animal = ml_.pick(
+    auto Animal = ml.pick(
         "cheetah",
         "lion",
         "rabbit",
@@ -213,7 +217,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "giraffe",
         "kangaroo"
     );
-    auto Sound = ml_.pick(
+    auto Sound = ml.pick(
         "meow",
         "chirp",
         "purr",
@@ -222,7 +226,47 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "bark",
         "squeak"
     );
-    auto Verb = ml_.pick(
+    auto Feature = ml.pick(
+        "fluffy tails",
+        "big ears",
+        "extra toes",
+        "short fur",
+        "green eyes",
+        "white fur"
+    );
+    auto Shape = ml.pick(
+        "spikes",
+        "bumps",
+        "barbs",
+        "curves",
+        "spirals",
+        "bristles"
+    );
+    auto AnimalNoise = ml.pick(
+        "chirp",
+        "bark",
+        "moo",
+        "honk",
+        "growl",
+        "squawk"
+    );
+    auto JobTitle = ml.pick(
+        "napper",
+        "supervisor",
+        "explorer",
+        "professional sleeper",
+        "adventurer",
+        "chef"
+    );
+    auto Thing_s = ml.pick(
+        "mice",
+        "birds",
+        "toys",
+        "treats",
+        "bugs",
+        "balls"
+    );
+    auto Verb = ml.pick(
         "climb",
         "leap",
         "run",
@@ -233,49 +277,13 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "feed",
         "comfort",
         "clean",
-        "cuddle"
+        "cuddle",
+        ml("find ",Thing_s),
+        ml("hunt ",Thing_s),
+        ml("disassemble ",Thing_s),
+        ml("count ",Thing_s)
     );
-    auto Feature = ml_.pick(
-        "fluffy tails",
-        "big ears",
-        "extra toes",
-        "short fur",
-        "green eyes",
-        "white fur"
-    );
-    auto Shape = ml_.pick(
-        "spikes",
-        "bumps",
-        "barbs",
-        "curves",
-        "spirals",
-        "bristles"
-    );
-    auto AnimalNoise = ml_.pick(
-        "chirp",
-        "bark",
-        "moo",
-        "honk",
-        "growl",
-        "squawk"
-    );
-    auto JobTitle = ml_.pick(
-        "napper",
-        "supervisor",
-        "explorer",
-        "professional sleeper",
-        "adventurer",
-        "chef"
-    );
-    auto Thing = ml_.pick(
-        "mouse",
-        "bird",
-        "toy",
-        "treat",
-        "bug",
-        "ball"
-    );
-    auto Scent = ml_.pick(
+    auto Scent = ml.pick(
         "lavender",
         "vanilla",
         "cinnamon",
@@ -283,7 +291,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "wet grass",
         "chocolate"
     );
-    auto Colour = ml_.pick(
+    auto Colour = ml.pick(
         "blue",
         "green",
         "yellow",
@@ -291,7 +299,7 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "purple",
         "orange"
     );
-    auto Action = ml_.pick(
+    auto Action = ml.pick(
         "waving",
         "beckoning",
         "dancing",
@@ -299,41 +307,53 @@ constexpr CatFacts::CattyFactual<T>::CattyFactual() {
         "signaling",
         "clapping"
     );
-    one_fact_ = ml_.pick(
-        ml_(breed, ability, reference, back_authority, ".", comment, "\n"),
-        ml_(breed, " can be ", can_be, back_authority, ".", comment, "\n"),
-        ml_(preamble, breed, ability, reference, "!!", comment, "\n"),
-        ml_("A cat can jump up to ",Number," times its own ",BodyPart," in height!\n"),
-        ml_("The average cat sleeps about ",Number," hours a day, basically making it a full-time ",Occupation,".\n"),
-        ml_("Cats communicate by ",Verb_ing," with humans, but rarely with other ",PluralNoun,".\n"),
-        ml_("A group of cats is called a ",FunnyNoun,", which also sounds like a hipster band name.\n"),
-        ml_("The oldest cat ever lived to be ",Number," years old and probably had strong opinions about ",TrendOrTopic,".\n"),
-        ml_("Cats can make over ",Number," distinct sounds, including meows, purrs, and the occasional ",WeirdSound,".\n"),
-        ml_("A cat’s nose print is as unique as a human ",BodyPart,", making every boop special.\n"),
-        ml_("Unlike dogs, cats can’t taste sweetness—they lack ",Noun,"-detecting taste buds.\n"),
-        ml_("In Ancient Egypt, cats were sacred and protected by laws against ",Verb_ing," them.\n"),
-        ml_("When a cat shows its belly, it could mean trust—or it could be a trap to test your ",Emotion,".\n"),
-        ml_("Cats have a specialized collarbone that allows them to always land on their ",BodyPart," when they fall.\n"),
-        ml_("The average cat can run at speeds up to ",Number," miles per hour—faster than most ",Animal,"!\n"),
-        ml_("A cat's purring can actually help lower ",Emotion," in humans, making it the perfect stress-buster.\n"),
-        ml_("In ancient Egypt, cats were so revered that they were mummified and placed in tombs with ",Possession,".\n"),
-        ml_("Some cats can rotate their ears a full ",Number," degrees, which gives them superhuman hearing abilities to detect ",Sound,".\n"),
-        ml_("The world record for the longest cat tail measures ",Number," inches long—definitely a tail to ,Verb!\n"),
-        ml_("A cat’s whiskers are so sensitive they can detect changes in the air, helping them to find ",Thing," in the dark.\n"),
-        ml_("Cats have an extra ",BodyPart," located under their paws, which helps them balance while climbing trees or ",Verb_ing,".\n"),
-        ml_("There are more than ",Number," breeds of domestic cats, each with its own unique ",Feature,".\n"),
-        ml_("In the wild, cats often communicate with a variety of ",PluralNoun," to establish territory or warn others.\n"),
-        ml_("A cat’s tongue is covered in tiny ",Shape," that help them groom their fur and scrape meat off bones.\n"),
-        ml_("Cats can make a sound called the “chirp”, which sounds like a cross between a meow and a ",AnimalNoise,". It’s often used when they see birds.\n"),
-        ml_("The average cat sleeps about ",Number," hours a day, which is basically a full-time ",JobTitle,".\n"),
-        ml_("There’s a condition called “feline hyperesthesia” that causes cats to suddenly become ",Emotion,". It's also known as “mad cat disease.”"),
-        ml_("Cats can jump up to ",Number," times their body length in a single leap, which makes them excellent at catching ",Thing,".\n"),
-        ml_("Your cat might knead you with its paws as a way of saying “I love you”—but it also mimics the motion they used as kittens to ",Verb," their mothers.\n"),
-        ml_("Cats have a specialized set of muscles in their ",BodyPart," that allow them to retract their claws, so they don’t get caught in things while running.\n"),
-        ml_("Unlike dogs, cats don’t need to be bathed because their fur is self-cleaning due to natural oils, which smell like ",Scent,".\n"),
-        ml_("Some cats have heterochromia, meaning each eye is a different ",Colour,".\n"),
-        ml_("In Japanese folklore, cats are believed to bring good luck. The “Maneki Neko” or “beckoning cat” is often seen with its paw raised in a gesture of ",Action,".\n")
+    auto Heterochromia = ml.pick(
+        "heterochromia",
+        "homophobia"
     );
+
+    auto entry = ml.pick(
+        ml(breed, ability, reference, back_authority, ".", comment, "\n"),
+        ml(breed, " can be ", can_be, back_authority, ".", comment, "\n"),
+        ml(preamble, breed, ability, reference, "!!", comment, "\n"),
+        ml("A cat can ",Verb," up to ",Number," times its own ",BodyPart," in height!\n"),
+        ml("The average cat sleeps about ",Number," hours a day, basically making it a full-time ",Occupation,".\n"),
+        ml("Cats communicate by ",Verb_ing," with humans, but rarely with other ",Noun_s,".\n"),
+        ml("A group of cats is called a ",FunnyNoun,", which also sounds like a hipster band name.\n"),
+        ml("The oldest cat ever lived to be ",Number," years old and probably had strong opinions about ",TrendOrTopic,".\n"),
+        ml("Cats can make over ",Number," distinct sounds, including meows, purrs, and the occasional ",WeirdSound,".\n"),
+        ml("A cat’s nose print is as unique as a human ",BodyPart,", making every boop special.\n"),
+        ml("Unlike dogs, cats can’t taste sweetness—they lack ",Noun,"-detecting taste buds.\n"),
+        ml("In Ancient Egypt, cats were sacred and protected by laws against ",Verb_ing," them.\n"),
+        ml("When a cat shows its belly, it could mean trust—or it could be a trap to test your ",Emotion,".\n"),
+        ml("Cats have a specialized collarbone that allows them to always land on their ",BodyPart," when they fall.\n"),
+        ml("The average cat can run at speeds up to ",Number," miles per hour—faster than most ",Animal,"!\n"),
+        ml("A cat's purring can actually help lower ",Emotion," in humans, making it the perfect stress-buster.\n"),
+        ml("In ancient Egypt, cats were so revered that they were mummified and placed in tombs with ",Possession,".\n"),
+        ml("Some cats can rotate their ",BodyPart,"s a full ",Number," degrees, which gives them superhuman ",Verb_ing," abilities to detect ",Sound,".\n"),
+        ml("The world record for the longest cat tail measures ",Number," inches long—definitely a tail to ",Verb,"!\n"),
+        ml("A cat’s ",BodyPart,"s are so sensitive they can detect changes in the air, helping them to find ",Thing_s," in the dark.\n"),
+        ml("Cats have an extra ",BodyPart," located under their paws, which helps them balance while climbing trees or ",Verb_ing,".\n"),
+        ml("There are more than ",Number," breeds of domestic cats, each with its own unique ",Feature,".\n"),
+        ml("In the wild, cats often communicate with a variety of ",Noun_s," to establish territory or warn others.\n"),
+        ml("A cat’s tongue is covered in tiny ",Shape," that help them groom their fur and scrape meat off bones.\n"),
+        ml("Cats can make a sound called the “chirp”, which sounds like a cross between a meow and a ",AnimalNoise,". It’s often used when they see birds.\n"),
+        ml("The average cat sleeps about ",Number," hours a day, which is basically a full-time ",JobTitle,".\n"),
+        ml("There’s a condition called “feline hyperesthesia” that causes cats to suddenly become ",Emotion,". It's also known as “mad cat disease.”\n"),
+        ml("Cats can ",Verb," up to ",Number," times their body length in a single leap, which makes them excellent at catching ",Thing_s,".\n"),
+        ml("Your cat might knead you with its paws as a way of saying “I love you”—but it also mimics the motion they used as kittens to ",Verb," their mothers.\n"),
+        ml("Cats have a specialized set of muscles in their ",BodyPart," that allow them to retract their claws, so they don’t get caught in things while running.\n"),
+        ml("Unlike dogs, cats don’t need to be bathed because their fur is self-cleaning due to natural oils, which smell like ",Scent,".\n"),
+        ml("Some cats have ",Heterochromia,", meaning each eye is a different ",Colour,".\n"),
+        ml("In Japanese folklore, cats are believed to bring good luck. The “Maneki Neko” or “beckoning cat” is often seen with its paw raised in a gesture of ",Action,".\n")
+    );
+    ml.set_entry(entry);
+    return ml;
 }
 
-constexpr CatFacts catfacts;
+constexpr auto gzip_tmp = cat_facts<GZip>();
+constexpr auto raw_tmp = cat_facts<RawData>();
+constexpr auto gzip_catfacts = gzip_tmp.make_pack<gzip_tmp.sizes()>();
+constexpr auto raw_catfacts = raw_tmp.make_pack<raw_tmp.sizes()>();
+
+constexpr CatFacts catfacts{gzip_catfacts, raw_catfacts};

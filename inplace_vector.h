@@ -15,13 +15,13 @@ class inplace_vector {
     using const_reverse_iterator = storage_type::const_reverse_iterator;
 
     constexpr inplace_vector() : data_{}, size_{0} {}
-    template <typename T_iter>
-    constexpr inplace_vector(T_iter begin, T_iter end) : data_{}, size_{end - begin} {
-        std::copy(begin, end, std::begin(data_));
+    constexpr inplace_vector(std::span<const T> o)
+            : data_{}, size_{o.size()} {
+        std::copy(o.begin(), o.end(), std::begin(data_));
     }
-    template <size_t M>
-    constexpr inplace_vector(inplace_vector<T, M>&& l) : inplace_vector{std::begin(l), std::end(l)} {}
-    constexpr inplace_vector(std::initializer_list<T> l) : inplace_vector{std::begin(l), std::end(l)} {}
+    template <typename T_iter>
+    constexpr inplace_vector(T_iter cbegin, T_iter cend)
+            : inplace_vector(std::span<const T>(cbegin, cend)) {}
 
     static constexpr size_type capacity() { return Capacity; }
     static constexpr size_type max_size() { return Capacity; }
@@ -87,6 +87,8 @@ class inplace_vector {
     constexpr reverse_iterator rend() { return std::rend(data_); }
     constexpr const_reverse_iterator rend() const { return std::crend(data_); }
     constexpr const_reverse_iterator crend() const { return std::crend(data_); }
+    constexpr operator std::span<T>() { return std::span<T>{begin(), end()}; }
+    constexpr operator std::span<const T>() const { return std::span<const T>{cbegin(), cend()}; }
 
    protected:
     constexpr bool full(size_type n = 1) const { return Capacity >= n && size_ > Capacity - n; }

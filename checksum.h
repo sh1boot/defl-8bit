@@ -174,6 +174,10 @@ struct NullChecksum {
 
     constexpr uint32_t get(bool = false) const { return 0; }
     constexpr operator uint32_t() const { return get(); }
+
+    static constexpr uint32_t check(uint32_t init, auto&& s) {
+        return 0;
+    }
 };
 
 struct Adler32 : private NullChecksum {
@@ -212,6 +216,12 @@ struct Adler32 : private NullChecksum {
         return (bsum_ % 65521) << 16 | (asum_ % 65521);
     }
     constexpr operator uint32_t() const { return get(); }
+
+    static constexpr uint32_t check(uint32_t init, auto&& s) {
+        Adler32 check{init};
+        for (auto c : s) check.add(c);
+        return check;
+    }
 };
 
 struct CRC32 : private NullChecksum {
@@ -239,6 +249,12 @@ struct CRC32 : private NullChecksum {
     }
 
     constexpr operator uint32_t() const { return get(); }
+
+    static constexpr uint32_t check(uint32_t init, auto&& s) {
+        CRC32 check{init};
+        for (auto c : s) check.add(c);
+        return check;
+    }
 };
 
 #endif  // !defined(CHECKSUM_H_INCLUDED)
